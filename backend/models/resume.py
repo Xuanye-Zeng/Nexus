@@ -68,7 +68,7 @@ class ResumeSection(Base, TimestampMixin):
     section_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(1536), nullable=True
+        Vector(768), nullable=True
     )
 
     profile: Mapped[ResumeProfile] = relationship(back_populates="sections")
