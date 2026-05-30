@@ -1,7 +1,7 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.2  
+> **Version:** 0.3  
 > **Last Updated:** 2026-05-29  
 > **Owner:** Xuanye (Alex) Zeng  
 > **Status:** Planning Phase
@@ -119,7 +119,7 @@ This project directly maps to AI Agent SDE job requirements:
 | Orchestration | LangGraph | Multi-agent state management |
 | LLM (dev) | Ollama qwen2.5:14b | Free, local, M4 optimized |
 | LLM (prod) | Claude claude-sonnet-4-20250514 or GPT-4o | Tool calling reliability |
-| Embeddings | text-embedding-3-small (OpenAI) | Cost-efficient, 1536-dim |
+| Embeddings | nomic-embed-text (Ollama, local) | Free, 768-dim, no API cost |
 | Vector DB | pgvector (PostgreSQL extension) | No separate DB, already using PG |
 | Observability | LangSmith | Trace every agent call |
 
@@ -158,8 +158,7 @@ This project directly maps to AI Agent SDE job requirements:
 ### LLM / AI
 | Service | Usage | Cost |
 |---|---|---|
-| Ollama (local) | Development & testing | Free |
-| OpenAI API | Embeddings (text-embedding-3-small) | ~$0.02/1M tokens |
+| Ollama (local) | Dev LLM + embeddings (qwen2.5:14b + nomic-embed-text) | Free |
 | Anthropic API / OpenAI GPT-4o | Production LLM calls | Pay-per-use |
 | LangSmith | Tracing & observability | Free tier (10k traces/month) |
 
@@ -175,14 +174,14 @@ users (id, email, name, created_at)
 
 -- Resume components (structured, not just PDF)
 resume_profiles (id, user_id, version, label, created_at)
-resume_sections (id, profile_id, section_type, content_json, embedding vector(1536))
+resume_sections (id, profile_id, section_type, content_json, embedding vector(768))
   -- section_type: 'project' | 'experience' | 'skill' | 'education'
 
 -- Job listings
 job_listings (
   id, source, source_id, company, title, location, 
   description_raw, description_clean, 
-  match_score float, embedding vector(1536),
+  match_score float, embedding vector(768),
   status, -- 'new' | 'saved' | 'applied' | 'rejected' | 'interviewing'
   scraped_at, expires_at
 )
@@ -617,6 +616,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 |---|---|---|
 | 2026-05-29 | 0.1 | Initial draft — architecture, tech stack, milestones, data model |
 | 2026-05-29 | 0.2 | Unified `prompt_templates.module` enum to `job_board` (was `job_match` in §5); aligned with §11 registry and §6 Module 2 naming |
+| 2026-05-29 | 0.3 | Switched embeddings from OpenAI text-embedding-3-small to local Ollama `nomic-embed-text` (768-dim, free); migrated `resume_sections.embedding` from `vector(1536)` to `vector(768)`; removed OpenAI dependency for dev/MVP (prod LLM still pay-per-use) |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 
