@@ -1,7 +1,7 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.1 — Initial Draft  
+> **Version:** 0.2  
 > **Last Updated:** 2026-05-29  
 > **Owner:** Xuanye (Alex) Zeng  
 > **Status:** Planning Phase
@@ -216,7 +216,7 @@ calendar_events (
 -- Prompt templates (versioned)
 prompt_templates (
   id, name, version int, content text,
-  module, -- 'resume_customizer' | 'email_triage' | 'job_match' | 'master_agent'
+  module, -- 'resume_customizer' | 'email_triage' | 'job_board' | 'master_agent'
   is_active bool, created_at
 )
 
@@ -616,6 +616,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | Date | Version | Changes |
 |---|---|---|
 | 2026-05-29 | 0.1 | Initial draft — architecture, tech stack, milestones, data model |
+| 2026-05-29 | 0.2 | Unified `prompt_templates.module` enum to `job_board` (was `job_match` in §5); aligned with §11 registry and §6 Module 2 naming |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 
