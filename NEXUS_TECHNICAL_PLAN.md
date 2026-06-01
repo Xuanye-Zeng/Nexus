@@ -1,8 +1,8 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.3  
-> **Last Updated:** 2026-05-29  
+> **Version:** 0.4  
+> **Last Updated:** 2026-05-31  
 > **Owner:** Xuanye (Alex) Zeng  
 > **Status:** Planning Phase
 
@@ -586,7 +586,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | Name | Module | Version | Status |
 |---|---|---|---|
 | `jd_keyword_extractor` | resume_customizer | v1 | draft |
-| `bullet_rewriter` | resume_customizer | v1 | draft |
+| `bullet_rewriter` | resume_customizer | v8 | **stable** — 9-version iteration, v8 is local optimum. Result-first rewriting causes number fabrication in llama-3.3-70b; defer to future model upgrade. |
 | `gap_analyzer` | resume_customizer | v1 | draft |
 | `email_classifier` | email_triage | v1 | draft |
 | `interview_detector` | email_triage | v1 | draft |
@@ -617,6 +617,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | 2026-05-29 | 0.1 | Initial draft — architecture, tech stack, milestones, data model |
 | 2026-05-29 | 0.2 | Unified `prompt_templates.module` enum to `job_board` (was `job_match` in §5); aligned with §11 registry and §6 Module 2 naming |
 | 2026-05-29 | 0.3 | Switched embeddings from OpenAI text-embedding-3-small to local Ollama `nomic-embed-text` (768-dim, free); migrated `resume_sections.embedding` from `vector(1536)` to `vector(768)`; removed OpenAI dependency for dev/MVP (prod LLM still pay-per-use) |
+| 2026-05-31 | 0.4 | `bullet_rewriter` iterated v1→v9, stabilized at v8; documented result-first regression risk (v9 fabricated "0%" under result-first pressure); switched LLM provider from local Ollama to Groq `llama-3.3-70b-versatile` for resume_customizer (CPU Ollama too slow on M4 Air); seeded Alex's 12 resume sections with embeddings |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 
