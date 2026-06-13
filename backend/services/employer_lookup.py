@@ -73,6 +73,13 @@ EMPLOYER_ALIASES: dict[str, str] = {
     "accenture": "accenture",
     "capgemini": "capgemini america",
 
+    # Lever-board brands that need explicit mapping
+    "matchgroup": "match group americas",
+    "match group": "match group americas",
+    "tinder": "tinder",
+    "discord": "discord",
+    "anduril": "anduril",                        # may not be in LCA db; safe to alias
+
     # Big Indian outsourcing
     "cognizant": "cognizant technology solutions us",
     "infosys": "infosys",
@@ -124,9 +131,10 @@ async def lookup_employer(
     if row:
         return row, "exact"
 
-    # Layer 3: prefix-token LIKE. Trailing space requires a token boundary
-    # so "data" can't match "databricks". Length floor avoids over-broad
-    # matches on very short queries.
+    # Layer 3: forward prefix-token LIKE — Adzuna name is a complete-word
+    # prefix of the DB name. E.g. "amazon" matches "amazon com services".
+    # Trailing space requires a token boundary so "data" can't match
+    # "databricks". Length floor avoids over-broad matches.
     if len(norm) >= PREFIX_MIN_LEN:
         row = (
             await s.execute(
@@ -138,5 +146,28 @@ async def lookup_employer(
         ).scalar_one_or_none()
         if row:
             return row, "prefix"
+
+    # Layer 4: reverse prefix-token — DB name is a complete-word prefix of
+    # the Adzuna name. E.g. Adzuna "Anduril Industries" should match a DB
+    # row that's just "anduril". The leading-space-or-start guard prevents
+    # matching unrelated short tokens lurking inside the Adzuna string.
+    if len(norm) >= PREFIX_MIN_LEN:
+        # Materialize the first 1-3 tokens of the Adzuna name as candidate
+        # DB keys and look each up in priority order (shortest first wins
+        # to handle the common "Brand + suffix words" pattern).
+        tokens = norm.split()
+        candidates = [" ".join(tokens[: i + 1]) for i in range(min(3, len(tokens)))]
+        candidates = [c for c in candidates if len(c) >= PREFIX_MIN_LEN and c != norm]
+        if candidates:
+            row = (
+                await s.execute(
+                    select(H1BEmployer)
+                    .where(H1BEmployer.employer_name_normalized.in_(candidates))
+                    .order_by(H1BEmployer.lca_count_last_12mo.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if row:
+                return row, "reverse_prefix"
 
     return None, "miss"
