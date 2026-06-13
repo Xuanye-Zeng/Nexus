@@ -649,7 +649,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | `email_classifier` | email_triage | v1 | draft |
 | `interview_detector` | email_triage | v1 | draft |
 | `job_match_scorer` | job_board | v1 | draft |
-| `sponsorship_classifier` | job_board | v1 | draft — extracts visa sponsorship signal from JD text; outputs `status` + `evidence` + `cpt_opt_signal` + `confidence`. Hardened with explicit-denial precedence over LCA history. |
+| `sponsorship_classifier` | job_board | v1 | **active** — JSON output `{status, evidence, cpt_opt_signal, confidence}`. Default-to-unclear on silence, explicit-denial precedence, evidence quoted verbatim. 5/5 fixture cases pass (explicit denial / explicit sponsors / TS-SCI citizen-only / silent EEO / intern CPT). |
 | `master_intent_classifier` | master_agent | v1 | draft |
 
 > Prompt content to be filled in as each module is built. All prompts are editable from the UI and versioned automatically on save.
