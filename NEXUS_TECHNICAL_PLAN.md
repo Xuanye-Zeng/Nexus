@@ -643,7 +643,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 
 | Name | Module | Version | Status |
 |---|---|---|---|
-| `jd_keyword_extractor` | resume_customizer | v1 | draft |
+| `jd_keyword_extractor` | resume_customizer | v1 | **active** — structured extractor (ROLE / REQUIRED / PREFERRED / RESPONSIBILITIES / SOFT / SPONSORSHIP / YOE). Verbatim-quote rule. SPONSORSHIP SIGNAL field is the upstream input for M2's sponsorship_classifier. |
 | `bullet_rewriter` | resume_customizer | v8 | **stable** — 9-version iteration, v8 is local optimum. Result-first rewriting causes number fabrication in llama-3.3-70b; defer to future model upgrade. |
 | `gap_analyzer` | resume_customizer | v1 | draft |
 | `email_classifier` | email_triage | v1 | draft |

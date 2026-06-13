@@ -1,0 +1,249 @@
+"""POST /api/customize-resume — JD in, customized bullets out.
+
+End-to-end M1 endpoint that chains the active prompts:
+
+    JD text
+      -> jd_keyword_extractor  (structured signals)
+      -> top_k_sections_for_jd (pgvector RAG, optional narrowing)
+      -> bullet_rewriter       (BEFORE / AFTER / REASON per bullet)
+
+Single-user mode: resume profile is resolved by ALEX_EMAIL until auth lands.
+"""
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_groq import ChatGroq
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config import settings
+from db import SessionLocal
+from models import PromptTemplate, ResumeProfile, ResumeSection, User
+from services.retrieval import top_k_sections_for_jd
+
+ALEX_EMAIL = "zeng.xuan@northeastern.edu"
+RAG_FILTERED_TYPES = {"project", "experience"}
+ALWAYS_KEEP_TYPES = {"skill", "education"}
+
+router = APIRouter(prefix="/api", tags=["resume_customizer"])
+
+
+# ---------- request / response schemas ----------
+
+
+class CustomizeRequest(BaseModel):
+    jd_text: str = Field(..., min_length=50, description="Raw job description text")
+    top_k: int | None = Field(
+        default=None,
+        description="If set, narrow project + experience to top-K by pgvector. "
+                    "Skills + education always kept.",
+        ge=1,
+        le=50,
+    )
+
+
+class SectionAudit(BaseModel):
+    section_type: str
+    label: str
+    distance: float | None
+    source: str  # "rag" | "always_keep"
+
+
+class CustomizeResponse(BaseModel):
+    jd_extraction: str
+    rewritten_resume: str
+    sections_used: list[SectionAudit]
+    prompt_versions: dict[str, int]
+
+
+# ---------- session dependency ----------
+
+
+async def get_session() -> AsyncSession:
+    async with SessionLocal() as s:
+        yield s
+
+
+# ---------- helpers ----------
+
+
+async def _active_prompt(s: AsyncSession, name: str) -> PromptTemplate:
+    row = (
+        await s.execute(
+            select(PromptTemplate)
+            .where(PromptTemplate.name == name, PromptTemplate.is_active.is_(True))
+            .order_by(PromptTemplate.version.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(500, f"No active prompt template named {name!r}")
+    return row
+
+
+async def _resolve_profile(s: AsyncSession) -> ResumeProfile:
+    user = (
+        await s.execute(select(User).where(User.email == ALEX_EMAIL))
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(500, f"User {ALEX_EMAIL!r} not seeded")
+    profile = (
+        await s.execute(
+            select(ResumeProfile)
+            .where(ResumeProfile.user_id == user.id)
+            .order_by(ResumeProfile.version.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        raise HTTPException(500, f"No resume profile for {ALEX_EMAIL!r}")
+    return profile
+
+
+def _section_label(sec: ResumeSection) -> str:
+    c = sec.content_json
+    if sec.section_type == "project":
+        return c.get("title", "?")
+    if sec.section_type == "experience":
+        return f"{c.get('role', '?')} @ {c.get('company', '?')}"
+    if sec.section_type == "education":
+        return f"{c.get('degree', '?')} @ {c.get('school', '?')}"
+    if sec.section_type == "skill":
+        return c.get("category", "?")
+    return "?"
+
+
+def _render_section(sec: ResumeSection) -> str:
+    c: dict[str, Any] = sec.content_json
+    if sec.section_type == "project":
+        bullets = "\n".join(f"- {b}" for b in c["bullets"])
+        return f"### {c['title']} ({c['dates']})\n{bullets}"
+    if sec.section_type == "experience":
+        bullets = "\n".join(f"- {b}" for b in c["bullets"])
+        return f"### {c['role']}, {c['company']} ({c['dates']})\n{bullets}"
+    if sec.section_type == "education":
+        details = "\n".join(f"- {d}" for d in c.get("details", []))
+        head = f"### {c['degree']}, {c['school']} ({c['dates']})"
+        return f"{head}\n{details}" if details else head
+    if sec.section_type == "skill":
+        return f"- {c['category']}: {', '.join(c['items'])}"
+    return ""
+
+
+def _render_resume(sections: list[ResumeSection]) -> str:
+    by_type: dict[str, list[ResumeSection]] = {}
+    for sec in sections:
+        by_type.setdefault(sec.section_type, []).append(sec)
+
+    blocks: list[str] = []
+    if "project" in by_type:
+        blocks.append(
+            "## PROJECTS\n\n" + "\n\n".join(_render_section(x) for x in by_type["project"])
+        )
+    if "experience" in by_type:
+        blocks.append(
+            "## EXPERIENCE\n\n" + "\n\n".join(_render_section(x) for x in by_type["experience"])
+        )
+    if "education" in by_type:
+        blocks.append(
+            "## EDUCATION\n\n" + "\n\n".join(_render_section(x) for x in by_type["education"])
+        )
+    if "skill" in by_type:
+        blocks.append(
+            "## SKILLS\n" + "\n".join(_render_section(x) for x in by_type["skill"])
+        )
+    return "\n\n".join(blocks)
+
+
+def _make_llm() -> ChatGroq:
+    return ChatGroq(
+        model=settings.GROQ_MODEL,
+        api_key=settings.GROQ_API_KEY.get_secret_value(),
+    )
+
+
+# ---------- endpoint ----------
+
+
+@router.post("/customize-resume", response_model=CustomizeResponse)
+async def customize_resume(
+    req: CustomizeRequest,
+    s: AsyncSession = Depends(get_session),
+) -> CustomizeResponse:
+    extractor_prompt = await _active_prompt(s, "jd_keyword_extractor")
+    rewriter_prompt = await _active_prompt(s, "bullet_rewriter")
+    profile = await _resolve_profile(s)
+
+    all_sections = (
+        await s.execute(
+            select(ResumeSection).where(ResumeSection.profile_id == profile.id)
+        )
+    ).scalars().all()
+
+    if req.top_k is None:
+        selected = all_sections
+        audit = [
+            SectionAudit(
+                section_type=sec.section_type,
+                label=_section_label(sec),
+                distance=None,
+                source="always_keep",
+            )
+            for sec in all_sections
+        ]
+    else:
+        ranked = await top_k_sections_for_jd(s, req.jd_text, profile.id, k=100)
+        ranked_filtered = [
+            r for r in ranked if r.section.section_type in RAG_FILTERED_TYPES
+        ][: req.top_k]
+        always_keep = [
+            sec for sec in all_sections if sec.section_type in ALWAYS_KEEP_TYPES
+        ]
+        selected = [r.section for r in ranked_filtered] + always_keep
+        audit = [
+            SectionAudit(
+                section_type=r.section.section_type,
+                label=_section_label(r.section),
+                distance=r.distance,
+                source="rag",
+            )
+            for r in ranked_filtered
+        ] + [
+            SectionAudit(
+                section_type=sec.section_type,
+                label=_section_label(sec),
+                distance=None,
+                source="always_keep",
+            )
+            for sec in always_keep
+        ]
+
+    resume_md = _render_resume(selected)
+
+    llm = _make_llm()
+
+    extraction = llm.invoke(
+        [
+            SystemMessage(content=extractor_prompt.content),
+            HumanMessage(content=f"## JD\n{req.jd_text}"),
+        ]
+    ).content
+
+    rewrite = llm.invoke(
+        [
+            SystemMessage(content=rewriter_prompt.content),
+            HumanMessage(content=f"## JD\n{req.jd_text}\n\n## RESUME SECTIONS\n{resume_md}"),
+        ]
+    ).content
+
+    return CustomizeResponse(
+        jd_extraction=extraction,
+        rewritten_resume=rewrite,
+        sections_used=audit,
+        prompt_versions={
+            "jd_keyword_extractor": extractor_prompt.version,
+            "bullet_rewriter": rewriter_prompt.version,
+        },
+    )
