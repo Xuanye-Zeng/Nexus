@@ -25,17 +25,17 @@ import argparse
 import asyncio
 import sys
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from config import settings
 from connectors import NormalizedListing, get_connector, list_connectors
 from db import SessionLocal
 from models import JobListing, PromptTemplate
 from services.embedding import embed_text
 from services.employer_lookup import lookup_employer
+from services.llm import describe_profile, get_llm
 from services.matching import score_listing_against_active_profile
 from services.sponsorship import (
     SponsorshipVerdict,
@@ -66,7 +66,7 @@ async def _fetch_classifier_prompt() -> str:
         return row.content
 
 
-def _classify_jd(llm: ChatGroq, prompt: str, jd_text: str) -> dict:
+def _classify_jd(llm: BaseChatModel, prompt: str, jd_text: str) -> dict:
     resp = llm.invoke(
         [SystemMessage(content=prompt), HumanMessage(content=f"## JD\n{jd_text}")]
     )
@@ -83,7 +83,7 @@ def _classify_jd(llm: ChatGroq, prompt: str, jd_text: str) -> dict:
 
 async def _enrich(
     listing: NormalizedListing,
-    llm: ChatGroq,
+    llm: BaseChatModel,
     classifier_prompt: str,
 ) -> dict:
     """Run the full enrichment chain on one listing. Returns dict ready to UPSERT."""
@@ -193,11 +193,11 @@ async def main(
         return 2
 
     classifier_prompt = await _fetch_classifier_prompt()
-    llm = ChatGroq(
-        model=settings.GROQ_MODEL,
-        api_key=settings.GROQ_API_KEY.get_secret_value(),
-    )
+    llm = get_llm("sponsorship_classifier")
 
+    print(
+        f"sponsorship_classifier LLM: {describe_profile('sponsorship_classifier')}"
+    )
     print(f"Fetching via {source} connector (keyword={keyword!r} location={location!r} max={max_results})...")
     listings = await connector.fetch(
         keyword=keyword, location=location, max_results=max_results

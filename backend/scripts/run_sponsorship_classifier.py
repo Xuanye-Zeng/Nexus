@@ -21,12 +21,11 @@ import sys
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from sqlalchemy import select
 
-from config import settings
 from db import SessionLocal
 from models import PromptTemplate
+from services.llm import describe_profile, get_llm
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "sponsorship_cases"
 PROMPT_NAME = "sponsorship_classifier"
@@ -74,17 +73,14 @@ def _parse_classifier_output(text: str) -> dict:
 
 async def main() -> int:
     prompt = await fetch_prompt()
-    llm = ChatGroq(
-        model=settings.GROQ_MODEL,
-        api_key=settings.GROQ_API_KEY.get_secret_value(),
-    )
+    llm = get_llm("sponsorship_classifier")
 
     fixtures = sorted(FIXTURES_DIR.glob("case_*.md"))
     if not fixtures:
         print(f"no fixtures in {FIXTURES_DIR}", file=sys.stderr)
         return 1
 
-    print(f"prompt: {len(prompt)} chars; running {len(fixtures)} cases on {settings.GROQ_MODEL}\n")
+    print(f"prompt: {len(prompt)} chars; running {len(fixtures)} cases on {describe_profile('sponsorship_classifier')}\n")
     print(f"{'case':<35}  {'expected':<20}  {'got_status':<18}  {'cpt':<3}  {'conf':<6}  {'pass'}")
     print("-" * 110)
 

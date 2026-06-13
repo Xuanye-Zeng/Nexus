@@ -11,12 +11,11 @@ import sys
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from sqlalchemy import select
 
-from config import settings
 from db import SessionLocal
 from models import PromptTemplate
+from services.llm import describe_profile, get_llm
 
 DEFAULT_JD = Path(__file__).resolve().parent.parent / "fixtures" / "jd_amazon_sde.md"
 PROMPT_NAME = "jd_keyword_extractor"
@@ -45,13 +44,10 @@ async def main(jd_path: Path) -> None:
     print("=" * 70, file=sys.stderr)
     print(f"prompt: {len(prompt)} chars", file=sys.stderr)
     print(f"jd:     {len(jd)} chars from {jd_path.name}", file=sys.stderr)
-    print(f"calling Groq model={settings.GROQ_MODEL} ...", file=sys.stderr)
+    print(f"jd_keyword_extractor LLM: {describe_profile('jd_keyword_extractor')} ...", file=sys.stderr)
     print("=" * 70, file=sys.stderr)
 
-    llm = ChatGroq(
-        model=settings.GROQ_MODEL,
-        api_key=settings.GROQ_API_KEY.get_secret_value(),
-    )
+    llm = get_llm("jd_keyword_extractor")
     resp = llm.invoke(
         [
             SystemMessage(content=prompt),

@@ -13,14 +13,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import settings
 from db import SessionLocal
 from models import PromptTemplate, ResumeProfile, ResumeSection, User
+from services.llm import get_llm
 from services.retrieval import top_k_sections_for_jd
 
 ALEX_EMAIL = "zeng.xuan@northeastern.edu"
@@ -157,13 +156,6 @@ def _render_resume(sections: list[ResumeSection]) -> str:
     return "\n\n".join(blocks)
 
 
-def _make_llm() -> ChatGroq:
-    return ChatGroq(
-        model=settings.GROQ_MODEL,
-        api_key=settings.GROQ_API_KEY.get_secret_value(),
-    )
-
-
 # ---------- endpoint ----------
 
 
@@ -222,16 +214,17 @@ async def customize_resume(
 
     resume_md = _render_resume(selected)
 
-    llm = _make_llm()
+    extractor_llm = get_llm("jd_keyword_extractor")
+    rewriter_llm = get_llm("bullet_rewriter")
 
-    extraction = llm.invoke(
+    extraction = extractor_llm.invoke(
         [
             SystemMessage(content=extractor_prompt.content),
             HumanMessage(content=f"## JD\n{req.jd_text}"),
         ]
     ).content
 
-    rewrite = llm.invoke(
+    rewrite = rewriter_llm.invoke(
         [
             SystemMessage(content=rewriter_prompt.content),
             HumanMessage(content=f"## JD\n{req.jd_text}\n\n## RESUME SECTIONS\n{resume_md}"),

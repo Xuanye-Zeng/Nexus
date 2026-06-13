@@ -16,12 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 from sqlalchemy import select
 
-from config import settings
 from db import SessionLocal
 from models import PromptTemplate, ResumeProfile, ResumeSection, User
+from services.llm import describe_profile, get_llm
 from services.retrieval import top_k_sections_for_jd
 
 ALEX_EMAIL = "zeng.xuan@northeastern.edu"
@@ -174,13 +173,10 @@ async def main(top_k: int | None) -> None:
         d = f"{dist:.4f}" if dist is not None else "keep"
         print(f"{i:>4}  {d:>10}  {sec.section_type:<11}  {_section_label(sec)[:55]}", file=sys.stderr)
     print("-" * 70, file=sys.stderr)
-    print(f"calling Groq model={settings.GROQ_MODEL} ...", file=sys.stderr)
+    print(f"bullet_rewriter LLM: {describe_profile('bullet_rewriter')} ...", file=sys.stderr)
     print("=" * 70, file=sys.stderr)
 
-    llm = ChatGroq(
-        model=settings.GROQ_MODEL,
-        api_key=settings.GROQ_API_KEY.get_secret_value(),
-    )
+    llm = get_llm("bullet_rewriter")
     resp = llm.invoke(
         [
             SystemMessage(content=prompt),
