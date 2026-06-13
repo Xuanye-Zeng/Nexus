@@ -55,6 +55,13 @@ VALID_TOOL_INTENTS = {
     "search_jobs",
     "customize_resume",
     "classify_sponsorship_for_jd",
+    # v1.5 — admin / data-management
+    "ingest_jobs",
+    "rescore_listings",
+    "get_top_resume_sections_for_jd",
+    # M3 email tools
+    "triage_emails",
+    "delete_emails",
 }
 
 
@@ -173,6 +180,26 @@ async def classify_sponsorship_node(state: AgentState) -> AgentState:
     return await _run_tool(state, "classify_sponsorship_for_jd")
 
 
+async def ingest_jobs_node(state: AgentState) -> AgentState:
+    return await _run_tool(state, "ingest_jobs")
+
+
+async def rescore_listings_node(state: AgentState) -> AgentState:
+    return await _run_tool(state, "rescore_listings")
+
+
+async def get_top_resume_sections_node(state: AgentState) -> AgentState:
+    return await _run_tool(state, "get_top_resume_sections_for_jd")
+
+
+async def triage_emails_node(state: AgentState) -> AgentState:
+    return await _run_tool(state, "triage_emails")
+
+
+async def delete_emails_node(state: AgentState) -> AgentState:
+    return await _run_tool(state, "delete_emails")
+
+
 async def clarify_node(state: AgentState) -> AgentState:
     # No tool call — clarification text already on state.
     return state
@@ -231,6 +258,11 @@ def _route_after_intent(state: AgentState) -> str:
         "search_jobs": "search_jobs_node",
         "customize_resume": "customize_resume_node",
         "classify_sponsorship_for_jd": "classify_sponsorship_node",
+        "ingest_jobs": "ingest_jobs_node",
+        "rescore_listings": "rescore_listings_node",
+        "get_top_resume_sections_for_jd": "get_top_resume_sections_node",
+        "triage_emails": "triage_emails_node",
+        "delete_emails": "delete_emails_node",
         "clarify": "clarify_node",
     }.get(intent, "clarify_node")
 
@@ -251,6 +283,11 @@ def _build_graph():
     g.add_node("search_jobs_node", search_jobs_node)
     g.add_node("customize_resume_node", customize_resume_node)
     g.add_node("classify_sponsorship_node", classify_sponsorship_node)
+    g.add_node("ingest_jobs_node", ingest_jobs_node)
+    g.add_node("rescore_listings_node", rescore_listings_node)
+    g.add_node("get_top_resume_sections_node", get_top_resume_sections_node)
+    g.add_node("triage_emails_node", triage_emails_node)
+    g.add_node("delete_emails_node", delete_emails_node)
     g.add_node("clarify_node", clarify_node)
     g.add_node("respond", respond_node)
 
@@ -262,13 +299,26 @@ def _build_graph():
             "search_jobs_node": "search_jobs_node",
             "customize_resume_node": "customize_resume_node",
             "classify_sponsorship_node": "classify_sponsorship_node",
+            "ingest_jobs_node": "ingest_jobs_node",
+            "rescore_listings_node": "rescore_listings_node",
+            "get_top_resume_sections_node": "get_top_resume_sections_node",
+            "triage_emails_node": "triage_emails_node",
+            "delete_emails_node": "delete_emails_node",
             "clarify_node": "clarify_node",
         },
     )
-    g.add_edge("search_jobs_node", "respond")
-    g.add_edge("customize_resume_node", "respond")
-    g.add_edge("classify_sponsorship_node", "respond")
-    g.add_edge("clarify_node", "respond")
+    for node in (
+        "search_jobs_node",
+        "customize_resume_node",
+        "classify_sponsorship_node",
+        "ingest_jobs_node",
+        "rescore_listings_node",
+        "get_top_resume_sections_node",
+        "triage_emails_node",
+        "delete_emails_node",
+        "clarify_node",
+    ):
+        g.add_edge(node, "respond")
     g.add_edge("respond", END)
 
     _GRAPH = g.compile()

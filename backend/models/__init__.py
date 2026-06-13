@@ -1,4 +1,5 @@
 from .base import Base
+from .email import Email
 from .h1b_employer import H1BEmployer
 from .job_listing import JobListing
 from .prompt_template import PromptTemplate
@@ -13,4 +14,5 @@ __all__ = [
     "PromptTemplate",
     "JobListing",
     "H1BEmployer",
+    "Email",
 ]

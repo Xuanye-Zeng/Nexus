@@ -9,7 +9,16 @@ Adding a tool: define the function in a new module, decorate with
 master_intent_classifier so the intent classifier learns about it. The
 dispatcher in agents/master.py discovers tools by name automatically.
 """
-from . import customize_resume, search_jobs, sponsorship  # noqa: F401
+from . import (  # noqa: F401
+    customize_resume,
+    delete_emails,
+    get_top_resume_sections,
+    ingest_jobs,
+    rescore_listings,
+    search_jobs,
+    sponsorship,
+    triage_emails,
+)
 from .registry import TOOLS, get_tool, list_tools, register_tool  # noqa: F401
 
 __all__ = [

@@ -73,6 +73,13 @@ LLM_PROFILES: dict[str, LLMProfile] = {
         model="qwen2.5:14b",
         temperature=0.3,
     ),
+    "email_classifier": LLMProfile(
+        # 8-class JSON classification with importance 1-5. Same shape as
+        # sponsorship_classifier; local 14b is the right fit.
+        provider="ollama",
+        model="qwen2.5:14b",
+        temperature=0.0,
+    ),
 }
 
 
