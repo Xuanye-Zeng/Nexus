@@ -1,10 +1,10 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.8  
+> **Version:** 0.9  
 > **Last Updated:** 2026-06-14  
 > **Owner:** Xuanye (Alex) Zeng  
-> **Status:** M1 backend done; M2 multi-source + hybrid LLM (local sponsorship + cloud rewriter) — no daily rate limit
+> **Status:** M1+M2 done; **M5 v1 Master Agent live** (LangGraph StateGraph, 3 tools, NL interface via POST /api/agent)
 
 ---
 
@@ -355,13 +355,26 @@ Each source (Adzuna, Greenhouse, Lever, Workday) implements this interface. Addi
 - "What interviews do I have this week?" → Calendar Agent
 - "Apply to the Cohere posting and draft a cover letter" → Resume Agent + tracks in Application
 
-**Tool registry:**
+**v1 tool registry (what's wired in M5 v1):**
+The full registry below is the aspirational target — only the ✅ tools are
+actually live in M5 v1 because their backing services exist. The others
+unlock as M3 (Email) and M4 (Calendar) land. Adding a new tool = one
+`@register_tool` decoration; the dispatcher discovers it automatically.
+
 ```python
 tools = [
-    search_jobs_tool,
+    # M5 v1 — live (job board + resume customizer surface as natural language)
+    search_jobs_tool,                     # ✅ uses query_jobs filters
+    customize_resume_tool,                # ✅ wraps POST /api/customize-resume
+    classify_sponsorship_for_jd_tool,     # ✅ ad-hoc JD paste -> sponsorship verdict
+
+    # M5 v1.5 — admin/maintenance, easy adds after v1 is verified
+    ingest_jobs_tool,                     # pull from Adzuna/Greenhouse/Lever
+    rescore_listings_tool,                # refresh match_score after resume update
+    get_top_resume_sections_for_jd_tool,  # RAG-only retrieval debug
+
+    # post-M3/M4 — unlocks as those modules land
     get_job_detail_tool,
-    match_resume_to_jd_tool,
-    customize_resume_tool,
     triage_emails_tool,
     delete_email_tool,
     get_calendar_events_tool,
@@ -650,7 +663,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | `interview_detector` | email_triage | v1 | draft |
 | `job_match_scorer` | job_board | v1 | draft |
 | `sponsorship_classifier` | job_board | v1 | **active** — JSON output `{status, evidence, cpt_opt_signal, confidence}`. Default-to-unclear on silence, explicit-denial precedence, evidence quoted verbatim. 5/5 fixture cases pass (explicit denial / explicit sponsors / TS-SCI citizen-only / silent EEO / intern CPT). |
-| `master_intent_classifier` | master_agent | v1 | draft |
+| `master_intent_classifier` | master_agent | v1 | **active** — JSON-output router over v1 tools (search_jobs / customize_resume / classify_sponsorship_for_jd / clarify). Routes on Ollama qwen2.5:14b local; 6/6 NL fixtures pass. |
 
 > Prompt content to be filled in as each module is built. All prompts are editable from the UI and versioned automatically on save.
 
@@ -684,6 +697,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | 2026-06-13 | 0.6 | M2 end-to-end pipeline live: Adzuna connector (httpx async, AdzunaListing dataclass), DOL LCA ingest (3 fiscal years FY2024-FY2026 Q2, 404K certified H-1B rows aggregated into 48K unique employers anchored at 2026-03-31), 3-layer brand-to-legal employer lookup (alias-first ordering with 40 hand-curated FAANG/outsourcing/finance/consulting aliases — 97% canonical-brand hit rate verified), `sponsorship_classifier` v1 prompt 5/5 fixture pass + activated, sponsorship resolver implementing plan §6 6-rule decision matrix (explicit-denial precedence verified on real Cyient listing — 35 LCAs/yr overridden by JD denial), end-to-end orchestrator `scripts/ingest_adzuna.py` chains classify+embed+lookup+resolve+upsert; verified by ingesting 10 real Seattle SDE listings into `job_listings`. Adzuna credentials added to `.env`/config. M1 status §10: 3/7 checkboxes done (resume sections embed, pgvector RAG, bullet rewriter); frontend diff view + PDF export + UI prompt switcher deferred to post-M2 unified frontend pass. |
 | 2026-06-13 | 0.7 | M2 hardened for multi-source + extensibility + resume-update freshness: (a) pluggable connector architecture via `connectors/base.py` ABC + `@register_connector` decorator + module-import-triggered registry — adding M6 Workday requires only writing one new file, zero edits to orchestrator; (b) Greenhouse + Lever connectors live (24 + 25 curated tech-startup boards respectively, async concurrent fetch, post-hoc keyword/location filter); (c) unified orchestrator `scripts/ingest_jobs.py --source` replaces source-specific ingest script; (d) match scoring via `services/matching.py` top-K=3 mean cosine similarity (JD vs project/experience/skill sections; education excluded as noise; bounds discussed in module docstring); (e) `scripts/rescore_listings.py` so when Alex updates resume → seed → rescore, ALL existing listings re-rank against new profile — match_score is per-active-profile, never stale; (f) employer_lookup Layer 4 added (reverse-prefix: DB short name + Adzuna long name, fixes Anduril-style misses) + 5 new Lever-brand aliases (Match Group/Tinder/Discord); (g) `scripts/query_jobs.py` daily-use CLI with filters (sponsors-only / location / company / source / keyword / min-score / min-conf), default hides no_sponsorship + us_citizen_only, ranks by match_score DESC then sponsorship_confidence DESC. Hit Groq free-tier daily token limit during M2 batch ingest (100K TPD on llama-3.3-70b-versatile) — flagged for next session, may switch to llama-3.1-8b-instant for bulk classify. |
 | 2026-06-14 | 0.8 | Hybrid LLM backend: `services/llm.py` factory + `LLM_PROFILES` per-purpose registry. Decision driven by benchmark (`scripts/benchmark_local_classifier.py`) over the 5 sponsorship fixtures: qwen2.5:14b local on M4 Air GPU scored 5/5 at 6s/call steady-state, matching Groq 70b accuracy without the 100K-TPD ceiling; qwen2.5:3b was 2.8s/call but 4/5 (missed intern_cpt nuance). Routing: `sponsorship_classifier` → ollama qwen2.5:14b (high-volume, simple 4-class classification), `bullet_rewriter` + `jd_keyword_extractor` → Groq llama-3.3-70b (low-volume, prompt-fidelity-sensitive). All 5 call sites (router + 4 scripts) migrated to `get_llm("purpose")` — switching a task's backend is now a one-line `LLM_PROFILES` edit. Bulk-ingested via the new path: 30 Greenhouse intern listings (28 sponsors / 2 unclear) + 5 Lever software-engineer + earlier Greenhouse 15 — DB now holds **64 listings across 18 unique companies** (55 sponsors / 1 explicit denial / 8 unclear). Zero Groq tokens consumed for the bulk ingest. |
+| 2026-06-14 | 0.9 | **M5 v1 Master Agent live.** LangGraph StateGraph (`agents/master.py`) with one classify_intent node → conditional router → 3 tool nodes (`search_jobs`, `customize_resume`, `classify_sponsorship_for_jd`) + clarify node → responder node. Tools live in `tools/` package with `@register_tool` decorator (registry-based, adding a new tool means writing one file + adding it to the intent prompt). `master_intent_classifier` v1 prompt seeded + activated; v1 spec covers exactly the 3 wired tools + a clarify intent for ambiguous inputs. Routed to local Ollama qwen2.5:14b (same reasoning as sponsorship_classifier: structured-JSON classification, no need for 70b). `master_responder` (also local 14b) summarizes tool output into NL. End-to-end verified: 6/6 NL fixtures hit correct intent (search-by-keyword/location, search-by-company, sponsors-only-with-limit, ambiguous single-token → clarify, pasted-JD → customize_resume, pasted-JD-with-explicit-denial → sponsorship). FastAPI `POST /api/agent` route added, smoke-tested live: "Show me top 3 sponsor-friendly Anthropic positions" → returns ranked listings with real evidence quotes from JD ("We do sponsor visas! However..."). Architectural note: tools depend only on services/* (zero LangChain coupling in business logic) so the same tools work for non-agent callers. §6 tool registry split into v1 / v1.5 / post-M3-M4 — M5 v1.5 adds `ingest_jobs` / `rescore_listings` / `get_top_resume_sections` as easy wins. |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 

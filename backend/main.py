@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 
 from config import settings
-from routers import customize_resume
+from routers import agent, customize_resume
 
-app = FastAPI(title="Nexus API", version="0.5.0")
+app = FastAPI(title="Nexus API", version="0.9.0")
 app.include_router(customize_resume.router)
+app.include_router(agent.router)
 
 
 @app.get("/health")

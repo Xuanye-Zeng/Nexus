@@ -57,6 +57,22 @@ LLM_PROFILES: dict[str, LLMProfile] = {
         model=settings.GROQ_MODEL,
         temperature=0.0,
     ),
+    "master_intent_classifier": LLMProfile(
+        # Intent routing is structured JSON classification — qwen2.5:14b
+        # local handles this as well as 70b for the v1 3-tool router,
+        # and avoids burning Groq's daily token budget on every user turn.
+        provider="ollama",
+        model="qwen2.5:14b",
+        temperature=0.0,
+    ),
+    "master_responder": LLMProfile(
+        # Natural-language formatter over tool output. Same model as intent
+        # for consistency; quality threshold is low here (it's summarizing
+        # already-structured data, not generating novel content).
+        provider="ollama",
+        model="qwen2.5:14b",
+        temperature=0.3,
+    ),
 }
 
 
