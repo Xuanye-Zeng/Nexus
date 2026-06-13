@@ -159,14 +159,18 @@ SECTIONS: list[dict[str, Any]] = [
 
 
 def section_to_text(section_type: str, content: dict[str, Any]) -> str:
-    """Flatten a section into a single string for embedding."""
+    """Flatten a section into a single string for embedding.
+
+    Project/experience embeddings use ONLY bullet content (no title/role/company)
+    so retrieval reflects actual work, not generic role keywords. Without this,
+    a "Software Engineer Intern" role title would dominate the embedding even
+    when bullets are CNC/G-code (manufacturing), causing wrong ranking against
+    a software JD.
+    """
     if section_type == "project":
-        return f"{content['title']}. " + " ".join(content["bullets"])
+        return " ".join(content["bullets"])
     if section_type == "experience":
-        return (
-            f"{content['role']} at {content['company']}. "
-            + " ".join(content["bullets"])
-        )
+        return " ".join(content["bullets"])
     if section_type == "education":
         details = " ".join(content.get("details", []))
         return f"{content['degree']} at {content['school']}. {details}"
