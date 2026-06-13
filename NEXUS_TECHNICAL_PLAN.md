@@ -1,10 +1,10 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.4  
-> **Last Updated:** 2026-05-31  
+> **Version:** 0.5  
+> **Last Updated:** 2026-06-12  
 > **Owner:** Xuanye (Alex) Zeng  
-> **Status:** Planning Phase
+> **Status:** M1 backend feature-complete, entering M2
 
 ---
 
@@ -155,6 +155,20 @@ This project directly maps to AI Agent SDE job requirements:
 | JobRight | Playwright scraper (Phase 2) | Login required, higher complexity |
 | LinkedIn | **NOT included** | ToS violation, legal risk |
 
+### Sponsorship / Visa Data Sources (M2)
+International student (CPT/OPT → H-1B) signal is a first-class requirement.
+The system surfaces sponsorship status as a primary filter on the Job Board.
+
+| Source | Method | Cost | Notes |
+|---|---|---|---|
+| U.S. DOL OFLC LCA Disclosure Data | Public CSV download (per fiscal year) | Free (.gov) | Ground truth — every H-1B/H-1B1/E-3 LCA filed by every U.S. employer; ~600K rows/year. Source: dol.gov/agencies/eta/foreign-labor/performance |
+| JD text classification | LLM (Groq) `sponsorship_classifier` prompt | Per-token | Detects in-JD signals: "no sponsorship", "must be authorized", "US citizen only" |
+| Static F500 / clearance heuristic | Hardcoded company lists | Free | Fallback when JD silent and no LCA history |
+
+**Signal precedence:** LCA filing history > explicit JD text > heuristic.
+JD text can lie ("we sponsor" but actually don't); LCA filings are legal
+documents the employer cannot retract — they are ground truth.
+
 ### LLM / AI
 | Service | Usage | Cost |
 |---|---|---|
@@ -179,11 +193,30 @@ resume_sections (id, profile_id, section_type, content_json, embedding vector(76
 
 -- Job listings
 job_listings (
-  id, source, source_id, company, title, location, 
-  description_raw, description_clean, 
+  id, source, source_id, company, title, location,
+  description_raw, description_clean,
   match_score float, embedding vector(768),
   status, -- 'new' | 'saved' | 'applied' | 'rejected' | 'interviewing'
-  scraped_at, expires_at
+  scraped_at, expires_at,
+
+  -- Sponsorship / international-student signals (M2)
+  sponsorship_status,      -- 'sponsors' | 'no_sponsorship' | 'us_citizen_only' | 'unclear'
+  sponsorship_evidence,    -- text: exact JD quote that triggered the classification
+  sponsorship_confidence,  -- float: 0.0-1.0 combined LLM + LCA signal
+  h1b_lca_count_recent,    -- int: company's LCA filings in the past 12 months
+  h1b_lca_year,            -- int: most recent fiscal year company filed an LCA
+  cpt_opt_friendly         -- bool: explicit intern / new-grad / CPT-OPT friendly signal
+)
+
+-- H-1B LCA employer aggregates (DOL OFLC public CSV, refreshed quarterly)
+h1b_employers (
+  id, employer_name_normalized, -- normalized lowercased name for join
+  lca_count_total int,
+  lca_count_last_12mo int,
+  most_recent_filing_year int,
+  most_recent_filing_date,
+  top_job_titles jsonb,         -- ["Software Engineer", "Data Scientist", ...]
+  updated_at
 )
 
 -- Applications (links jobs + emails + calendar)
@@ -246,14 +279,31 @@ agent_runs (
 ---
 
 ### Module 2: Job Board
-**What it does:** Aggregates listings from multiple sources, scores each against your resume, displays ranked feed.
+**What it does:** Aggregates listings from multiple sources, scores each against your resume, **classifies sponsorship status for international students**, displays ranked feed.
 
 **Flow:**
 1. Celery background task runs scrapers on schedule (every 6hrs)
 2. Each connector (Adzuna, Greenhouse, Lever, Workday) fetches listings
 3. New listings get embedded and scored against resume profile embedding
-4. Frontend displays ranked feed with filters (score, location, company, source)
-5. User can save, mark applied, or dismiss
+4. **`sponsorship_classifier` LLM call** runs on each JD → extracts `status` + `evidence` + `cpt_opt_signal`
+5. **LCA cross-reference**: company name normalized, joined against `h1b_employers` table → fills `h1b_lca_count_recent` and adjusts `sponsorship_confidence`
+6. Frontend displays ranked feed with filters (score, location, company, source, **sponsorship_status**)
+7. Default filter view hides `no_sponsorship` and `us_citizen_only` listings
+8. User can save, mark applied, or dismiss
+
+**Sponsorship resolution logic (final `sponsorship_status` decision):**
+```
+IF JD explicitly says "no sponsorship" or "US citizen only"
+  → use JD signal (LCA history doesn't override an explicit denial)
+ELIF LCA count_last_12mo >= 5
+  → 'sponsors' (high confidence, even if JD silent)
+ELIF JD says "we sponsor" AND LCA count >= 1
+  → 'sponsors'
+ELIF JD says "we sponsor" AND LCA count == 0
+  → 'unclear' (lower confidence — they claim to but never have)
+ELSE
+  → 'unclear'
+```
 
 **Connector interface (abstract):**
 ```python
@@ -448,13 +498,15 @@ cd frontend && npm run dev
 **Branch:** `feature/resume-customizer`
 
 **Done means:**
-- [ ] Resume sections stored in DB with embeddings
-- [ ] JD input → keyword extraction working
-- [ ] pgvector similarity search returning relevant sections
-- [ ] LLM rewriting bullets using JD language
-- [ ] Frontend diff view shows original vs customized side-by-side
-- [ ] PDF export works (browser print or puppeteer)
-- [ ] Prompt version stored in DB, swappable from UI
+- [x] Resume sections stored in DB with embeddings *(2026-05-31, 12 sections, nomic-embed-text 768-dim)*
+- [ ] JD input → keyword extraction working *(`jd_keyword_extractor` prompt pending)*
+- [x] pgvector similarity search returning relevant sections *(2026-06-12, `top_k_sections_for_jd`, median 2.34ms / p95 4.31ms)*
+- [x] LLM rewriting bullets using JD language *(2026-05-31, `bullet_rewriter` v8 stable, 1% bullet fail rate)*
+- [ ] Frontend diff view shows original vs customized side-by-side *(deferred to post-M2 unified frontend pass)*
+- [ ] PDF export works (browser print or puppeteer) *(deferred to post-M2)*
+- [ ] Prompt version stored in DB, swappable from UI *(DB schema done; UI deferred)*
+
+**M1 backend feature-complete (2026-06-12):** data layer + RAG + LLM rewriter pipeline. Frontend deferred to a unified pass after M2 ingests real listings (avoids building an empty UI).
 
 **Good means:**
 - Customized bullets sound like a human wrote them, not AI
@@ -479,17 +531,23 @@ cd frontend && npm run dev
 - [ ] All listings normalized into `job_listings` table
 - [ ] Embeddings generated for each listing
 - [ ] Match score computed against resume profile
-- [ ] Frontend feed shows ranked listings with score, company, title, source
-- [ ] Filters working: location, score threshold, source, status
+- [ ] **DOL OFLC LCA CSV ingested into `h1b_employers` table** (most recent fiscal year, ~600K rows)
+- [ ] **`sponsorship_classifier` prompt runs on every new listing, status + evidence + confidence stored**
+- [ ] **Company-level LCA cross-reference populates `h1b_lca_count_recent`**
+- [ ] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge**
+- [ ] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)**
 - [ ] Celery background task runs every 6 hours
 
 **Good means:**
 - 50+ real listings aggregated on first run
 - Match scores feel intuitively correct (ML/backend jobs score higher than unrelated ones)
 - No duplicate listings from same source
+- **Sponsorship classification accuracy ≥90% reviewed against 20 listings hand-labeled by Alex**
+- **Zero false `sponsors` on listings that explicitly deny sponsorship** (false-negative on filtering safer than false-positive that wastes an application)
 
 **Great means:**
 - Alex uses the feed as his primary job discovery tool for 1 week
+- **Alex applies only to sponsorship-friendly listings — no wasted applications on visa-incompatible roles**
 
 ---
 
@@ -591,6 +649,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | `email_classifier` | email_triage | v1 | draft |
 | `interview_detector` | email_triage | v1 | draft |
 | `job_match_scorer` | job_board | v1 | draft |
+| `sponsorship_classifier` | job_board | v1 | draft — extracts visa sponsorship signal from JD text; outputs `status` + `evidence` + `cpt_opt_signal` + `confidence`. Hardened with explicit-denial precedence over LCA history. |
 | `master_intent_classifier` | master_agent | v1 | draft |
 
 > Prompt content to be filled in as each module is built. All prompts are editable from the UI and versioned automatically on save.
@@ -607,6 +666,9 @@ All prompts stored in `prompt_templates` table. Current registry:
 | LLM email classification misses important emails | Medium | High | Build feedback loop: Alex marks corrections, use as few-shot examples |
 | Celery job queue gets backed up | Low | Low | Add rate limiting per connector, monitor queue depth |
 | LLM costs spike in production | Low | Medium | Set hard token limits per request; use local Ollama for dev |
+| Sponsorship classifier false-positive (`sponsors` when company denies) | Medium | **High** | JD explicit-denial overrides LCA history; default UI hides `no_sponsorship`; show `evidence` quote on every badge so Alex can spot-check |
+| DOL LCA CSV schema changes year-to-year | Low | Medium | Pin to fiscal-year filename + column-by-column parser; re-validate on refresh |
+| Company name fuzzy-match fails (Inc/LLC/subsidiaries) | High | Medium | Normalize: lowercase, strip suffixes (inc/llc/corp/co/ltd), strip punctuation, before join |
 
 ---
 
@@ -618,6 +680,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | 2026-05-29 | 0.2 | Unified `prompt_templates.module` enum to `job_board` (was `job_match` in §5); aligned with §11 registry and §6 Module 2 naming |
 | 2026-05-29 | 0.3 | Switched embeddings from OpenAI text-embedding-3-small to local Ollama `nomic-embed-text` (768-dim, free); migrated `resume_sections.embedding` from `vector(1536)` to `vector(768)`; removed OpenAI dependency for dev/MVP (prod LLM still pay-per-use) |
 | 2026-05-31 | 0.4 | `bullet_rewriter` iterated v1→v9, stabilized at v8; documented result-first regression risk (v9 fabricated "0%" under result-first pressure); switched LLM provider from local Ollama to Groq `llama-3.3-70b-versatile` for resume_customizer (CPU Ollama too slow on M4 Air); seeded Alex's 12 resume sections with embeddings |
+| 2026-06-12 | 0.5 | M1 backend feature-complete (added pgvector RAG `top_k_sections_for_jd` — median 2.34ms / p95 4.31ms on 12 sections); M2 scope expansion for international students: added §4 sponsorship data sources (DOL OFLC LCA Disclosure Data + JD-text classifier + F500 heuristic), added 6 columns to `job_listings` (`sponsorship_status` / `sponsorship_evidence` / `sponsorship_confidence` / `h1b_lca_count_recent` / `h1b_lca_year` / `cpt_opt_friendly`) + new `h1b_employers` table, added `sponsorship_classifier` prompt to §11 registry, updated §6 Module 2 flow with sponsorship classifier + LCA cross-reference steps + resolution-logic pseudocode, updated §10 M2 Done/Good/Great with sponsorship checkboxes (LCA ingest, classifier, badge, default filter hides no-sponsorship), added 3 new risks to §12 (false-positive sponsors / DOL CSV schema drift / company name fuzzy match); status shifted from "Planning Phase" to "M1 backend feature-complete, entering M2" |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 
