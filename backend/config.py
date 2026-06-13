@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "nomic-embed-text"
     GROQ_API_KEY: SecretStr
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    ADZUNA_APP_ID: str = ""
+    ADZUNA_APP_KEY: SecretStr = SecretStr("")
+    ADZUNA_COUNTRY: str = "us"
 
     model_config = SettingsConfigDict(
         env_file=".env",
