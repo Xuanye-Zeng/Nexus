@@ -37,3 +37,6 @@ postgres_data/
 
 # Logs
 *.log
+
+# Local data dumps (large files: DOL LCA xlsx, etc.)
+backend/data/
