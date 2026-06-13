@@ -1,10 +1,10 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 0.5  
-> **Last Updated:** 2026-06-12  
+> **Version:** 0.6  
+> **Last Updated:** 2026-06-13  
 > **Owner:** Xuanye (Alex) Zeng  
-> **Status:** M1 backend feature-complete, entering M2
+> **Status:** M1 backend feature-complete; M2 end-to-end pipeline live (Adzuna + LCA + sponsorship verdict)
 
 ---
 
@@ -525,18 +525,18 @@ cd frontend && npm run dev
 **Branch:** `feature/job-board`
 
 **Done means:**
-- [ ] Adzuna API connector working, fetching real listings
+- [x] Adzuna API connector working, fetching real listings *(2026-06-13)*
 - [ ] Greenhouse JSON endpoint connector working
 - [ ] Lever API connector working
-- [ ] All listings normalized into `job_listings` table
-- [ ] Embeddings generated for each listing
-- [ ] Match score computed against resume profile
-- [ ] **DOL OFLC LCA CSV ingested into `h1b_employers` table** (most recent fiscal year, ~600K rows)
-- [ ] **`sponsorship_classifier` prompt runs on every new listing, status + evidence + confidence stored**
-- [ ] **Company-level LCA cross-reference populates `h1b_lca_count_recent`**
-- [ ] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge**
-- [ ] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)**
-- [ ] Celery background task runs every 6 hours
+- [x] All listings normalized into `job_listings` table *(2026-06-13)*
+- [x] Embeddings generated for each listing *(2026-06-13, nomic-embed-text 768d)*
+- [ ] Match score computed against resume profile *(field present, scoring pass deferred)*
+- [x] **DOL OFLC LCA CSV ingested into `h1b_employers` table** *(2026-06-13, 3 fiscal years FY2024-FY2026 Q2, 404K certified H-1B-family rows → 48,047 unique employers)*
+- [x] **`sponsorship_classifier` prompt runs on every new listing, status + evidence + confidence stored** *(2026-06-13)*
+- [x] **Company-level LCA cross-reference populates `h1b_lca_count_recent`** *(2026-06-13, 3-layer alias/exact/prefix lookup, 97% hit on canonical brands)*
+- [ ] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge** *(deferred to post-M2 frontend pass)*
+- [ ] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)** *(deferred, schema supports)*
+- [ ] Celery background task runs every 6 hours *(manual ingest works, scheduler deferred)*
 
 **Good means:**
 - 50+ real listings aggregated on first run
@@ -681,6 +681,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 | 2026-05-29 | 0.3 | Switched embeddings from OpenAI text-embedding-3-small to local Ollama `nomic-embed-text` (768-dim, free); migrated `resume_sections.embedding` from `vector(1536)` to `vector(768)`; removed OpenAI dependency for dev/MVP (prod LLM still pay-per-use) |
 | 2026-05-31 | 0.4 | `bullet_rewriter` iterated v1→v9, stabilized at v8; documented result-first regression risk (v9 fabricated "0%" under result-first pressure); switched LLM provider from local Ollama to Groq `llama-3.3-70b-versatile` for resume_customizer (CPU Ollama too slow on M4 Air); seeded Alex's 12 resume sections with embeddings |
 | 2026-06-12 | 0.5 | M1 backend feature-complete (added pgvector RAG `top_k_sections_for_jd` — median 2.34ms / p95 4.31ms on 12 sections); M2 scope expansion for international students: added §4 sponsorship data sources (DOL OFLC LCA Disclosure Data + JD-text classifier + F500 heuristic), added 6 columns to `job_listings` (`sponsorship_status` / `sponsorship_evidence` / `sponsorship_confidence` / `h1b_lca_count_recent` / `h1b_lca_year` / `cpt_opt_friendly`) + new `h1b_employers` table, added `sponsorship_classifier` prompt to §11 registry, updated §6 Module 2 flow with sponsorship classifier + LCA cross-reference steps + resolution-logic pseudocode, updated §10 M2 Done/Good/Great with sponsorship checkboxes (LCA ingest, classifier, badge, default filter hides no-sponsorship), added 3 new risks to §12 (false-positive sponsors / DOL CSV schema drift / company name fuzzy match); status shifted from "Planning Phase" to "M1 backend feature-complete, entering M2" |
+| 2026-06-13 | 0.6 | M2 end-to-end pipeline live: Adzuna connector (httpx async, AdzunaListing dataclass), DOL LCA ingest (3 fiscal years FY2024-FY2026 Q2, 404K certified H-1B rows aggregated into 48K unique employers anchored at 2026-03-31), 3-layer brand-to-legal employer lookup (alias-first ordering with 40 hand-curated FAANG/outsourcing/finance/consulting aliases — 97% canonical-brand hit rate verified), `sponsorship_classifier` v1 prompt 5/5 fixture pass + activated, sponsorship resolver implementing plan §6 6-rule decision matrix (explicit-denial precedence verified on real Cyient listing — 35 LCAs/yr overridden by JD denial), end-to-end orchestrator `scripts/ingest_adzuna.py` chains classify+embed+lookup+resolve+upsert; verified by ingesting 10 real Seattle SDE listings into `job_listings`. Adzuna credentials added to `.env`/config. M1 status §10: 3/7 checkboxes done (resume sections embed, pgvector RAG, bullet rewriter); frontend diff view + PDF export + UI prompt switcher deferred to post-M2 unified frontend pass. |
 
 > This document is updated after every major decision or milestone completion. When starting a new conversation with Claude, paste the relevant section for context.
 
