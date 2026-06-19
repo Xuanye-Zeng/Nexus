@@ -21,6 +21,7 @@ from db import SessionLocal
 from models import PromptTemplate, ResumeProfile, ResumeSection, User
 from services.llm import get_llm
 from services.retrieval import top_k_sections_for_jd
+from services.sponsorship import parse_classifier_output, resolve_sponsorship
 
 ALEX_EMAIL = "zeng.xuan@northeastern.edu"
 RAG_FILTERED_TYPES = {"project", "experience"}
@@ -50,9 +51,18 @@ class SectionAudit(BaseModel):
     source: str  # "rag" | "always_keep"
 
 
+class SponsorshipVerdictOut(BaseModel):
+    status: str   # 'sponsors' | 'no_sponsorship' | 'us_citizen_only' | 'unclear'
+    confidence: float
+    evidence: str
+    cpt_opt_friendly: bool
+    reasoning: str
+
+
 class CustomizeResponse(BaseModel):
     jd_extraction: str
     rewritten_resume: str
+    sponsorship: SponsorshipVerdictOut
     sections_used: list[SectionAudit]
     prompt_versions: dict[str, int]
 
@@ -166,6 +176,7 @@ async def customize_resume(
 ) -> CustomizeResponse:
     extractor_prompt = await _active_prompt(s, "jd_keyword_extractor")
     rewriter_prompt = await _active_prompt(s, "bullet_rewriter")
+    sponsorship_prompt = await _active_prompt(s, "sponsorship_classifier")
     profile = await _resolve_profile(s)
 
     all_sections = (
@@ -216,6 +227,7 @@ async def customize_resume(
 
     extractor_llm = get_llm("jd_keyword_extractor")
     rewriter_llm = get_llm("bullet_rewriter")
+    sponsorship_llm = get_llm("sponsorship_classifier")
 
     extraction = extractor_llm.invoke(
         [
@@ -231,12 +243,41 @@ async def customize_resume(
         ]
     ).content
 
+    # Sponsorship pass — same prompt the M2 pipeline uses; JD-only verdict
+    # (no company lookup since the user pastes a JD without a known company).
+    sponsor_raw = sponsorship_llm.invoke(
+        [
+            SystemMessage(content=sponsorship_prompt.content),
+            HumanMessage(content=f"## JD\n{req.jd_text}"),
+        ]
+    ).content
+    try:
+        sponsor_out = parse_classifier_output(sponsor_raw)
+    except Exception:
+        sponsor_out = {"status": "unclear", "evidence": "", "cpt_opt_signal": False, "confidence": 0.0}
+    verdict = resolve_sponsorship(
+        jd_status=sponsor_out.get("status", "unclear"),
+        jd_confidence=float(sponsor_out.get("confidence", 0.0)),
+        jd_evidence=sponsor_out.get("evidence", "") or "",
+        cpt_opt_signal=bool(sponsor_out.get("cpt_opt_signal", False)),
+        lca_count_12mo=None,
+        lca_most_recent_year=None,
+    )
+
     return CustomizeResponse(
         jd_extraction=extraction,
         rewritten_resume=rewrite,
+        sponsorship=SponsorshipVerdictOut(
+            status=verdict.status,
+            confidence=verdict.confidence,
+            evidence=verdict.evidence,
+            cpt_opt_friendly=verdict.cpt_opt_friendly,
+            reasoning=verdict.reasoning,
+        ),
         sections_used=audit,
         prompt_versions={
             "jd_keyword_extractor": extractor_prompt.version,
             "bullet_rewriter": rewriter_prompt.version,
+            "sponsorship_classifier": sponsorship_prompt.version,
         },
     )

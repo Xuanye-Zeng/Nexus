@@ -1,30 +1,60 @@
 import { Bell, Settings, User } from 'lucide-react'
+import { Link, NavLink } from 'react-router-dom'
 
-const NAV_ITEMS = ['Dashboard', 'Jobs', 'Resume', 'Emails', 'Calendar', 'Agent']
+interface NavItem {
+  label: string
+  to: string | null   // null = not yet routable (placeholder)
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Dashboard', to: '/' },
+  { label: 'Jobs', to: null },
+  { label: 'Resume', to: '/resume' },
+  { label: 'Emails', to: null },
+  { label: 'Calendar', to: null },
+  { label: 'Agent', to: null },
+]
 
 export function TopBar() {
   return (
     <header className="flex items-center justify-between gap-4 mb-8">
       <div className="flex items-center gap-3">
-        <div className="h-10 px-5 rounded-full bg-white border border-cream-200 flex items-center">
+        <Link
+          to="/"
+          className="h-10 px-5 rounded-full bg-white border border-cream-200 flex items-center hover:bg-cream-50 transition-colors"
+        >
           <span className="font-semibold tracking-tight text-ink-900">Nexus</span>
-        </div>
+        </Link>
       </div>
 
       <nav className="flex items-center bg-cream-50/80 border border-cream-200 rounded-full p-1 shadow-sm">
-        {NAV_ITEMS.map((item, i) => (
-          <button
-            key={item}
-            className={`px-4 py-1.5 text-sm rounded-full transition-colors ${
-              i === 0
-                ? 'bg-ink-900 text-white font-medium'
-                : 'text-ink-500 hover:text-ink-900'
-            }`}
-            disabled={i !== 0}
-          >
-            {item}
-          </button>
-        ))}
+        {NAV_ITEMS.map((item) =>
+          item.to ? (
+            <NavLink
+              key={item.label}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                `px-4 py-1.5 text-sm rounded-full transition-colors ${
+                  isActive
+                    ? 'bg-ink-900 text-white font-medium'
+                    : 'text-ink-500 hover:text-ink-900'
+                }`
+              }
+            >
+              {item.label}
+            </NavLink>
+          ) : (
+            <button
+              key={item.label}
+              disabled
+              className="px-4 py-1.5 text-sm rounded-full text-ink-500/50 cursor-not-allowed"
+              title="Coming soon"
+            >
+              {item.label}
+            </button>
+          ),
+        )}
       </nav>
 
       <div className="flex items-center gap-2">

@@ -69,6 +69,42 @@ export async function fetchOverview(): Promise<OverviewData> {
   return data
 }
 
+// ---- Resume Customizer (POST /api/customize-resume) ----
+
+export interface SponsorshipVerdict {
+  status: SponsorshipStatus
+  confidence: number
+  evidence: string
+  cpt_opt_friendly: boolean
+  reasoning: string
+}
+
+export interface SectionAudit {
+  section_type: string
+  label: string
+  distance: number | null
+  source: 'rag' | 'always_keep'
+}
+
+export interface CustomizeResponse {
+  jd_extraction: string
+  rewritten_resume: string
+  sponsorship: SponsorshipVerdict
+  sections_used: SectionAudit[]
+  prompt_versions: Record<string, number>
+}
+
+export async function customizeResume(
+  jdText: string,
+  topK?: number,
+): Promise<CustomizeResponse> {
+  const { data } = await api.post<CustomizeResponse>('/api/customize-resume', {
+    jd_text: jdText,
+    top_k: topK ?? null,
+  })
+  return data
+}
+
 // ---- Master Agent (POST /api/agent) ----
 
 export interface AgentResponse {
