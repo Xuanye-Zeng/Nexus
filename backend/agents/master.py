@@ -25,7 +25,10 @@ Adding a new intent:
 from __future__ import annotations
 
 import json
+import os
 import re
+import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
@@ -34,7 +37,7 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
 from db import SessionLocal
-from models import PromptTemplate
+from models import AgentRun, PromptTemplate
 from services.llm import get_llm
 from tools import get_tool
 
@@ -338,14 +341,96 @@ class MasterAgentResult:
     error: str = ""
 
 
-async def run_master_agent(user_message: str) -> MasterAgentResult:
+def _resolve_status(intent: str, error: str) -> str:
+    if error:
+        return "tool_error" if intent and intent != "clarify" else "error"
+    if intent == "clarify":
+        return "clarify"
+    return "success"
+
+
+def _summarize(text: str | None, cap: int = 4000) -> str | None:
+    if text is None:
+        return None
+    s = str(text)
+    return s if len(s) <= cap else s[: cap - 1] + "…"
+
+
+async def _write_agent_run(
+    *,
+    user_id: uuid.UUID | None,
+    user_message: str,
+    final: AgentState,
+    latency_ms: int,
+    langsmith_trace_id: str | None,
+) -> None:
+    """Persist one master-agent invocation. Failures are swallowed — the
+    user-facing response must never be blocked by an audit-write hiccup."""
+    intent = final.get("intent", "")
+    error = final.get("error", "")
+    status = _resolve_status(intent, error)
+    tool_result = final.get("tool_result")
+    tool_result_summary = (
+        _summarize(json.dumps(tool_result, default=str, ensure_ascii=False))
+        if tool_result is not None
+        else None
+    )
+
+    try:
+        async with SessionLocal() as s:
+            s.add(
+                AgentRun(
+                    user_id=user_id,
+                    module="master_agent",
+                    intent=intent or None,
+                    status=status,
+                    input_summary=_summarize(user_message, cap=2000),
+                    response=_summarize(final.get("response", ""), cap=4000),
+                    tool_args=final.get("tool_args") or None,
+                    tool_result_summary=tool_result_summary,
+                    classifier_reasoning=_summarize(
+                        final.get("classifier_reasoning", ""), cap=1000
+                    ),
+                    error=_summarize(error, cap=2000) or None,
+                    latency_ms=latency_ms,
+                    langsmith_trace_id=langsmith_trace_id,
+                )
+            )
+            await s.commit()
+    except Exception:  # noqa: BLE001 — audit write must never break the agent
+        pass
+
+
+async def run_master_agent(
+    user_message: str, *, user_id: uuid.UUID | None = None
+) -> MasterAgentResult:
     """Run one full turn through the StateGraph.
 
-    Returns a flat dataclass so the CLI / FastAPI route don't need to know
-    about LangGraph state shape.
+    Persists an `agent_runs` row on every invocation (intent + tool_args +
+    tool_result summary + latency + status). LangSmith trace ID is captured
+    when `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` are set in the env —
+    LangChain auto-instruments via these vars without any code change here.
     """
     graph = _build_graph()
+
+    langsmith_trace_id: str | None = None
+    if os.getenv("LANGSMITH_TRACING") == "true":
+        # Pass a stable run_id through LangChain's callback so LangSmith
+        # surfaces it back as the trace id we record.
+        langsmith_trace_id = str(uuid.uuid4())
+
+    t0 = time.perf_counter()
     final: AgentState = await graph.ainvoke({"user_message": user_message})
+    latency_ms = int((time.perf_counter() - t0) * 1000)
+
+    await _write_agent_run(
+        user_id=user_id,
+        user_message=user_message,
+        final=final,
+        latency_ms=latency_ms,
+        langsmith_trace_id=langsmith_trace_id,
+    )
+
     return MasterAgentResult(
         response=final.get("response", ""),
         intent=final.get("intent", ""),

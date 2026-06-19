@@ -1,3 +1,4 @@
+from .agent_run import AgentRun
 from .base import Base
 from .email import Email
 from .h1b_employer import H1BEmployer
@@ -15,4 +16,5 @@ __all__ = [
     "JobListing",
     "H1BEmployer",
     "Email",
+    "AgentRun",
 ]
