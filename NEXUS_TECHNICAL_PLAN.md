@@ -559,7 +559,7 @@ cd frontend && npm run dev
 - [x] **Company-level LCA cross-reference populates `h1b_lca_count_recent`** *(2026-06-13, 3-layer alias/exact/prefix lookup, 97% hit on canonical brands)*
 - [ ] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge** *(deferred to post-M2 frontend pass)*
 - [ ] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)** *(deferred, schema supports)*
-- [ ] Celery background task runs every 6 hours *(manual ingest works, scheduler deferred)*
+- [x] Celery background task runs every 6 hours *(2026-06-19, `celery_app.py` + `tasks.py`; 4 beat entries — Adzuna :00, Greenhouse :15, Lever :30, Workday :45 — staggered to avoid LLM contention)*
 
 **Good means:**
 - 50+ real listings aggregated on first run
