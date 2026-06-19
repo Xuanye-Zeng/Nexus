@@ -2,7 +2,7 @@
 into the CONNECTORS registry in base.py.
 """
 # Importing each connector module fires its @register_connector decorator.
-from . import adzuna, greenhouse, lever  # noqa: F401
+from . import adzuna, greenhouse, lever, workday  # noqa: F401
 from .base import (  # noqa: F401
     CONNECTORS,
     JobConnector,
