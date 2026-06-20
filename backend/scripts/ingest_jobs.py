@@ -250,17 +250,38 @@ async def main(
     return 0
 
 
+async def _run_all_sources(
+    keyword: str | None, location: str | None, max_results: int, dry_run: bool
+) -> int:
+    """Fan out an ingest across every registered connector, serially.
+    Serial (not parallel) because the per-listing pipeline already hits Ollama
+    + Groq + Postgres + pgvector — running 4 sources concurrently just
+    contends on the LLMs and slows the whole thing down.
+    """
+    sources = list_connectors()
+    print(f"Running ingest across {len(sources)} source(s): {', '.join(sources)}\n")
+    worst = 0
+    for src in sources:
+        print(f"\n{'=' * 60}\n>>> SOURCE: {src}\n{'=' * 60}")
+        rc = await main(src, keyword, location, max_results, dry_run)
+        worst = max(worst, rc or 0)
+    return worst
+
+
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--source",
-        choices=list_connectors(),
+        choices=[*list_connectors(), "all"],
         default="adzuna",
-        help=f"Connector to use. Available: {', '.join(list_connectors())}",
+        help=f"Connector to use, or 'all' to fan out. Available: {', '.join(list_connectors())} | all",
     )
     p.add_argument("--keyword", default=None)
     p.add_argument("--location", default=None)
-    p.add_argument("--max", type=int, default=20, help="Max listings to ingest")
+    p.add_argument("--max", type=int, default=20, help="Max listings to ingest (per source if --source all)")
     p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
-    sys.exit(asyncio.run(main(ns.source, ns.keyword, ns.location, ns.max, ns.dry_run)))
+    if ns.source == "all":
+        sys.exit(asyncio.run(_run_all_sources(ns.keyword, ns.location, ns.max, ns.dry_run)))
+    else:
+        sys.exit(asyncio.run(main(ns.source, ns.keyword, ns.location, ns.max, ns.dry_run)))

@@ -162,7 +162,7 @@ if __name__ == "__main__":
     )
     p.add_argument("--location")
     p.add_argument("--company")
-    p.add_argument("--source", choices=["adzuna", "greenhouse", "lever"])
+    p.add_argument("--source", choices=["adzuna", "greenhouse", "lever", "workday"])
     p.add_argument("--keyword", help="Substring match against title/description")
     p.add_argument("--min-score", type=float, help="match_score >= this")
     p.add_argument("--min-conf", type=float, help="sponsorship_confidence >= this")

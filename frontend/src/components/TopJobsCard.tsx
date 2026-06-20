@@ -11,6 +11,7 @@ const SOURCE_LABEL: Record<string, string> = {
   adzuna: 'Adzuna',
   greenhouse: 'Greenhouse',
   lever: 'Lever',
+  workday: 'Workday',
 }
 
 export function TopJobsCard({ jobs }: Props) {

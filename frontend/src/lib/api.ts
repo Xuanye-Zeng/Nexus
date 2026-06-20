@@ -12,7 +12,7 @@ export type SponsorshipStatus =
   | 'us_citizen_only'
   | 'unclear'
 
-export type JobSource = 'adzuna' | 'greenhouse' | 'lever'
+export type JobSource = 'adzuna' | 'greenhouse' | 'lever' | 'workday'
 
 export interface TopJob {
   id: string
