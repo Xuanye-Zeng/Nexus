@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
@@ -407,20 +408,27 @@ async def run_master_agent(
     """Run one full turn through the StateGraph.
 
     Persists an `agent_runs` row on every invocation (intent + tool_args +
-    tool_result summary + latency + status). LangSmith trace ID is captured
-    when `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY` are set in the env —
-    LangChain auto-instruments via these vars without any code change here.
+    tool_result summary + latency + status). When `LANGSMITH_TRACING=true`
+    + `LANGSMITH_API_KEY` are set, we generate a UUID, pass it as the
+    LangChain RunnableConfig `run_id`, and LangSmith uses that as the
+    trace root — so the value we save in `agent_runs.langsmith_trace_id`
+    is the same id you can deep-link to in the LangSmith UI.
     """
     graph = _build_graph()
 
+    # Generate a trace id ONLY when tracing is enabled — otherwise the column
+    # stays NULL and we don't pollute the DB with uncorrelated uuids.
+    config: RunnableConfig | None = None
     langsmith_trace_id: str | None = None
     if os.getenv("LANGSMITH_TRACING") == "true":
-        # Pass a stable run_id through LangChain's callback so LangSmith
-        # surfaces it back as the trace id we record.
-        langsmith_trace_id = str(uuid.uuid4())
+        trace_uuid = uuid.uuid4()
+        langsmith_trace_id = str(trace_uuid)
+        config = {"run_id": trace_uuid}
 
     t0 = time.perf_counter()
-    final: AgentState = await graph.ainvoke({"user_message": user_message})
+    final: AgentState = await graph.ainvoke(
+        {"user_message": user_message}, config=config
+    )
     latency_ms = int((time.perf_counter() - t0) * 1000)
 
     await _write_agent_run(
