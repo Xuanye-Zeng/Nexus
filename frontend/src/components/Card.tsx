@@ -34,23 +34,6 @@ export function DarkCard({
   )
 }
 
-/** Soft amber card — KPI hero. */
-export function AmberCard({
-  children,
-  className = '',
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={`bg-amber-brand text-ink-900 rounded-3xl p-6 ${className}`}
-    >
-      {children}
-    </div>
-  )
-}
-
 export function CardHeader({
   title,
   right,

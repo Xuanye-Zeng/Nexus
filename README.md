@@ -201,14 +201,13 @@ docker compose up -d
 # 2. Backend
 cd backend
 python3 -m venv venv && source venv/bin/activate
-pip install -e . || pip install fastapi uvicorn sqlalchemy[asyncio] asyncpg alembic \
-    pgvector langchain langchain-ollama langchain-groq langgraph httpx pandas openpyxl celery redis pydantic-settings
-cp .env.example .env  # fill in GROQ_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY
-venv/bin/alembic upgrade head
-venv/bin/python -m scripts.seed_prompts
-venv/bin/python -m scripts.seed_resume        # uses bundled fixture resume
-venv/bin/python -m scripts.ingest_dol_lca     # ~3 fiscal years of LCA data, ~5 min
-venv/bin/uvicorn main:app --reload
+pip install -e .                           # uses pyproject.toml
+cp .env.example .env                       # fill in GROQ_API_KEY, ADZUNA_APP_ID, ADZUNA_APP_KEY
+alembic upgrade head
+python -m scripts.seed_prompts             # loads the 5 active prompts into prompt_templates
+python -m scripts.seed_resume              # uses bundled fixture resume
+python -m scripts.ingest_dol_lca           # ~3 fiscal years of LCA data, ~5 min
+uvicorn main:app --reload
 
 # 3. Celery (optional, for 6h auto-ingest)
 venv/bin/celery -A celery_app worker --beat -l info

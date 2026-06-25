@@ -1,0 +1,88 @@
+[project]
+name = "nexus-backend"
+version = "1.4.0"
+description = "Multi-agent personal job-search assistant — backend"
+readme = "../README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [{ name = "Xuanye Zeng", email = "zeng.xuan@northeastern.edu" }]
+
+dependencies = [
+    # FastAPI + ASGI
+    "fastapi>=0.118",
+    "uvicorn[standard]>=0.32",
+
+    # DB
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pgvector>=0.4",
+    "greenlet>=3.1",                # required for SQLAlchemy async
+
+    # Config
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+
+    # HTTP + connectors
+    "httpx>=0.28",
+    "aiohttp>=3.11",                # langchain-ollama uses this under the hood
+
+    # LLM stack
+    "langchain>=1.0",
+    "langchain-core>=1.0",
+    "langchain-groq>=0.4",
+    "langchain-ollama>=0.4",
+    "langgraph>=1.0",
+
+    # M2 — DOL OFLC LCA xlsx ingest
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+
+    # E — Celery 6h auto-ingest
+    "celery>=5.4",
+    "redis>=5.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Tell setuptools where the package lives — backend/ is not nested under a
+# top-level package directory; the modules are siblings of pyproject.toml.
+[tool.setuptools]
+py-modules = [
+    "main",
+    "config",
+    "db",
+    "celery_app",
+    "tasks",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "agents*",
+    "connectors*",
+    "models*",
+    "routers*",
+    "scripts*",
+    "services*",
+    "tools*",
+]
+exclude = ["venv*", "alembic*", "fixtures*", "prompts*", "data*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]                   # line length handled by formatter

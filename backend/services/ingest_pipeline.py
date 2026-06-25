@@ -33,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from connectors import NormalizedListing, get_connector
 from db import SessionLocal
 from models import JobListing, PromptTemplate
-from services.embedding import embed_text
+from services.embedding import aembed_text
 from services.employer_lookup import lookup_employer
 from services.llm import get_llm
 from services.matching import score_listing_against_active_profile
@@ -178,7 +178,7 @@ async def enrich_listing(
             lca_most_recent_year=lca_year,
         )
 
-        embedding = embed_text(jd_text[:8000])
+        embedding = await aembed_text(jd_text[:8000])
         match_score = await score_listing_against_active_profile(s, embedding)
 
     return EnrichedListing(
