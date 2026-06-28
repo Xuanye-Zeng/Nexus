@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from pathlib import Path
 
 from agents import run_master_agent
 

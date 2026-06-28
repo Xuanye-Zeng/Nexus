@@ -1,5 +1,7 @@
 # Nexus
 
+[![CI](https://github.com/Xuanye-Zeng/Nexus/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Xuanye-Zeng/Nexus/actions/workflows/ci.yml)
+
 A personal job-search assistant built around a multi-agent core. Ingests jobs
 from four sources, classifies visa sponsorship per posting, customizes my
 resume against any JD, and surfaces it all behind a natural-language search

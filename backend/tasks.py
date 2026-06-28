@@ -21,7 +21,9 @@ if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
 from celery_app import celery_app
-from scripts.ingest_jobs import main as ingest_main  # eager import to surface path issues at worker boot
+from scripts.ingest_jobs import (
+    main as ingest_main,  # eager import to surface path issues at worker boot
+)
 
 logger = logging.getLogger(__name__)
 

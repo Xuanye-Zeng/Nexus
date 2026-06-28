@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+# Auto-cancel in-progress runs when a new commit lands on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend lint + tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install
+        # `-e .[dev]` resolves all deps from pyproject.toml + ruff/pytest dev
+        # extras. Slower than installing just pytest+ruff, but it doubles as
+        # a "pyproject.toml is install-able" smoke check.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Ruff lint
+        run: ruff check . --exclude venv --exclude alembic
+
+      - name: Pytest
+        # Dummy env vars so pydantic-settings doesn't bail when modules
+        # transitively import `config.settings`. None of the tests actually
+        # hit Groq / Postgres / Ollama / Adzuna — they exercise pure logic.
+        env:
+          GROQ_API_KEY: ci-dummy
+          ADZUNA_APP_ID: ci-dummy
+          ADZUNA_APP_KEY: ci-dummy
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5433/ci
+        run: pytest tests/ -v
+
+  frontend:
+    name: frontend type check + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: TypeScript build
+        # `vite build` runs tsc + bundles; catches type errors + Tailwind v4
+        # token resolution + unused-import drift.
+        run: npm run build

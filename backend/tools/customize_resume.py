@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import SessionLocal
 from models import PromptTemplate, ResumeProfile, ResumeSection, User
 from services.embedding import embed_text  # noqa: F401  (kept for future RAG batch use)
-from services.employer_lookup import lookup_employer
 from services.llm import get_llm
 from services.retrieval import top_k_sections_for_jd
 from services.sponsorship import parse_classifier_output, resolve_sponsorship

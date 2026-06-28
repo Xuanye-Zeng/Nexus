@@ -85,4 +85,20 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["E501"]                   # line length handled by formatter
+ignore = [
+    "E501",   # line length handled by formatter
+    "B905",   # zip-without-strict — cosine/embed loops don't need strict on aligned pairs
+]
+
+# Per-file overrides for legitimate idioms ruff flags by default.
+[tool.ruff.lint.per-file-ignores]
+# celery_app / tasks / tests inject backend/ into sys.path BEFORE imports
+# because macOS Python 3.13+ spawns rather than forks workers; without it,
+# `from scripts.ingest_jobs import main` ImportError's in the forked process.
+"celery_app.py" = ["E402"]
+"tasks.py" = ["E402"]
+"tests/conftest.py" = ["E402"]
+# FastAPI's documented dep-injection idiom IS Depends() in a default arg.
+"routers/*.py" = ["B008"]
+# Scripts run as __main__ — argparse calls in defaults are fine.
+"scripts/*.py" = ["B008"]

@@ -25,7 +25,6 @@ def _parse_expected(filename: str) -> str:
 
 def _parse_email(text: str) -> dict:
     """Extract From / Subject / Received / Body sections."""
-    fields: dict[str, str] = {}
     sender = subject = received = None
     body_lines = []
     in_body = False

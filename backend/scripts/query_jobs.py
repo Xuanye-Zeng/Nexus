@@ -25,7 +25,7 @@ import json as jsonlib
 import sys
 from dataclasses import dataclass
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import or_, select
 
 from db import SessionLocal
 from models import JobListing

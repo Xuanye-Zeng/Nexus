@@ -84,7 +84,6 @@ async def select_sections(
     filtered_ranked = [
         r for r in ranked if r.section.section_type in RAG_FILTERED_TYPES
     ][:top_k]
-    kept_ids = {r.section.id for r in filtered_ranked}
 
     always_keep = [
         sec for sec in all_sections if sec.section_type in ALWAYS_KEEP_TYPES

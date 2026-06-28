@@ -14,7 +14,6 @@ import json
 import re
 from dataclasses import dataclass
 
-
 # JD-text-side status enum from the classifier.
 JD_STATUSES = {"sponsors", "no_sponsorship", "us_citizen_only", "unclear"}
 

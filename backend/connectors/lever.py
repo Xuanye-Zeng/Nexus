@@ -11,7 +11,7 @@ sponsor-friendly tech companies that use Lever. Override via constructor
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 import httpx
@@ -69,7 +69,7 @@ def _parse_one(raw: dict[str, Any], company_fallback: str) -> NormalizedListing 
     updated_ms = raw.get("updatedAt") or raw.get("createdAt")
     try:
         scraped_at = (
-            datetime.fromtimestamp(int(updated_ms) / 1000, tz=timezone.utc)
+            datetime.fromtimestamp(int(updated_ms) / 1000, tz=UTC)
             if updated_ms
             else datetime.utcnow()
         )

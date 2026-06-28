@@ -118,7 +118,7 @@ async def main() -> int:
             )
 
         await s.commit()
-    print(f"done.")
+    print("done.")
     return 0
 
 

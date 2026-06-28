@@ -164,7 +164,7 @@ async def main(models: list[str]) -> int:
     prompt = await fetch_prompt()
     fixtures = sorted(FIXTURES_DIR.glob("case_*.md"))
     print(f"prompt: {len(prompt)} chars; fixtures: {len(fixtures)}")
-    print(f"baseline (Groq llama-3.3-70b): ~4.4s/call, 5/5 pass, but capped at 100K TPD\n")
+    print("baseline (Groq llama-3.3-70b): ~4.4s/call, 5/5 pass, but capped at 100K TPD\n")
 
     summaries = []
     for m in models:

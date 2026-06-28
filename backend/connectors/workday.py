@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import httpx
@@ -97,7 +97,7 @@ def _parse_posted_on(posted_on: str | None) -> datetime:
     """Workday gives 'Posted 2 Days Ago' / 'Posted Today' / 'Posted Yesterday'.
     Convert to an absolute UTC timestamp for scraped_at, using `now` as the
     reference. Falls back to now() on unparseable strings."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not posted_on:
         return now
     s = posted_on.strip()
