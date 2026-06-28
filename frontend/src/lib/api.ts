@@ -127,3 +127,57 @@ export const MUTATING_INTENTS = new Set([
   'rescore_listings',
   'delete_emails',
 ])
+
+// ---- Agent runs (GET /api/agent/runs + /stats) ----
+
+export type AgentRunStatus = 'success' | 'clarify' | 'error' | 'tool_error'
+
+export interface AgentRun {
+  id: string
+  module: string
+  intent: string | null
+  status: AgentRunStatus
+  input_summary: string | null
+  response: string | null
+  classifier_reasoning: string | null
+  error: string | null
+  latency_ms: number | null
+  langsmith_trace_id: string | null
+  created_at: string
+}
+
+export interface AgentRunsPage {
+  total: number
+  items: AgentRun[]
+}
+
+export interface AgentRunsStats {
+  total: number
+  by_intent: Record<string, number>
+  by_status: Record<string, number>
+  avg_latency_ms: number | null
+  p95_latency_ms: number | null
+}
+
+export interface AgentRunsQuery {
+  intent?: string | null
+  status?: AgentRunStatus | null
+  limit?: number
+  offset?: number
+}
+
+export async function fetchAgentRuns(q: AgentRunsQuery = {}): Promise<AgentRunsPage> {
+  const params: Record<string, string | number> = {
+    limit: q.limit ?? 20,
+    offset: q.offset ?? 0,
+  }
+  if (q.intent) params.intent = q.intent
+  if (q.status) params.status = q.status
+  const { data } = await api.get<AgentRunsPage>('/api/agent/runs', { params })
+  return data
+}
+
+export async function fetchAgentRunsStats(): Promise<AgentRunsStats> {
+  const { data } = await api.get<AgentRunsStats>('/api/agent/runs/stats')
+  return data
+}

@@ -12,7 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Resume', to: '/resume' },
   { label: 'Emails', to: null },
   { label: 'Calendar', to: null },
-  { label: 'Agent', to: null },
+  { label: 'Agent', to: '/agent' },
 ]
 
 export function TopBar() {
