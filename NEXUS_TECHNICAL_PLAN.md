@@ -1,10 +1,10 @@
 # Nexus — AI-Powered Personal Job Search Assistant
 ## Technical Plan & Living Document
 
-> **Version:** 1.4  
-> **Last Updated:** 2026-06-19  
+> **Version:** 1.5  
+> **Last Updated:** 2026-06-28  
 > **Owner:** Xuanye (Alex) Zeng  
-> **Status:** M1+M2+M3 v1+M5 v1.5+M6 v1 done; Dashboard + /resume live; **Celery 6h auto-ingest live**; **agent_runs observability** live (per-turn latency / status / intent / args, GET /api/agent/runs + stats endpoints). 4 connectors, 8 tools, 2 frontend routes.
+> **Status:** M1+M2+M3 v1+M5 v1.5+M6 v1 done; Dashboard + /resume + /jobs + /agent live; **Celery 6h auto-ingest live**; **agent_runs observability** live (per-turn latency / status / intent / args, GET /api/agent/runs + stats endpoints); **pytest scaffold + GitHub Actions CI live** (72 tests across 4 pure-function suites, ruff lint, frontend tsc + vite build all gating on every push/PR). 4 connectors, 8 tools, 4 frontend routes.
 
 ---
 
@@ -459,14 +459,16 @@ PRs into `develop` require CI pass. Merge to `main` triggers deploy.
 
 ### GitHub Actions Workflows
 
-**CI (on every PR to develop):**
-```yaml
-- Lint: ruff (Python), eslint (TypeScript)
-- Type check: mypy (Python), tsc (TypeScript)
-- Unit tests: pytest (backend), vitest (frontend)
-- Integration tests: pytest with test DB
-- Docker build check
-```
+**CI** — `.github/workflows/ci.yml`, runs on push + PR to `develop` / `main`. Two jobs in parallel:
+
+| Job | Steps |
+|---|---|
+| `backend` | `actions/setup-python@v5` (3.13) + pip cache → `pip install -e .[dev]` (also smoke-tests pyproject.toml installs cleanly) → `ruff check . --exclude venv --exclude alembic` → `pytest tests/ -v` (72 tests across `test_normalize` / `test_sponsorship` / `test_workday_parser` / `test_matching`, runs in ~3s) with dummy env vars so pydantic-settings doesn't bail at import time |
+| `frontend` | `actions/setup-node@v4` (24) + npm cache → `npm ci` → `npm run build` (`tsc -b && vite build` — catches type errors + Tailwind v4 token resolution + dead imports) |
+
+`concurrency.cancel-in-progress: true` so stale runs auto-cancel when a new commit lands on the same branch. README has a status badge linking to the workflow.
+
+**CD (on merge to main):** *(not yet wired — deferred to Phase 1 Railway setup)*
 
 **CD (on merge to main):**
 ```yaml
@@ -557,8 +559,8 @@ cd frontend && npm run dev
 - [x] **DOL OFLC LCA CSV ingested into `h1b_employers` table** *(2026-06-13, 3 fiscal years FY2024-FY2026 Q2, 404K certified H-1B-family rows → 48,047 unique employers)*
 - [x] **`sponsorship_classifier` prompt runs on every new listing, status + evidence + confidence stored** *(2026-06-13)*
 - [x] **Company-level LCA cross-reference populates `h1b_lca_count_recent`** *(2026-06-13, 3-layer alias/exact/prefix lookup, 97% hit on canonical brands)*
-- [x] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge** *(2026-06-17, Dashboard daily job feed renders 15 sponsor-friendly listings with SPONSORS / CPT-OPT / N LCAs/yr badges; full standalone `/jobs` page deferred)*
-- [~] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)** *(API layer complete via `GET /api/jobs?keyword=&location=&company=&source=&sponsorship_status=&min_score=&min_confidence=&hide_denials=`; dashboard hard-filters denials by default; standalone `/jobs` page with UI filter chips deferred)*
+- [x] Frontend feed shows ranked listings with score, company, title, source, **sponsorship badge** *(2026-06-17 Dashboard daily feed; 2026-06-28 standalone `/jobs` page with ranks + sponsorship/CPT-OPT/LCA badges + external links + evidence tooltip)*
+- [x] Filters working: location, score threshold, source, status, **sponsorship_status (default hides no_sponsorship + us_citizen_only)** *(2026-06-28 standalone `/jobs` page wires all 7 filters — keyword/location/company free-text with 300ms debounce, source/sponsorship/min-score selects, hide-denials toggle on by default; reset button + 'Showing N of M' counter + Prev/Next pagination)*
 - [x] Celery background task runs every 6 hours *(2026-06-19, `celery_app.py` + `tasks.py`; 4 beat entries — Adzuna :00, Greenhouse :15, Lever :30, Workday :45 — staggered to avoid LLM contention)*
 
 **Good means:**
@@ -701,6 +703,7 @@ All prompts stored in `prompt_templates` table. Current registry:
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-06-28 | 1.5 | **Frontend `/jobs` + `/agent` pages live (R1 + R2) + pytest scaffold + GitHub Actions CI (R8 + R9).** Frontend: two new full-page routes complete the "all 4 backend-backed nav items reachable" set — `/jobs` wraps `GET /api/jobs` with debounced free-text filters (keyword / location / company), source + sponsorship + min-score selects, hide-denials toggle (default on, matches backend), reset button, "Showing N of M" header, summary stat tiles (Total / Sponsors / Avg score) pulled from `/api/jobs/stats`, Prev/Next pagination at 20/page; `/agent` surfaces the M5 `agent_runs` audit table with a Recharts horizontal bar chart of top-10 intents + filterable timeline (intent + relative time + latency + expandable response/classifier_reasoning/error + LangSmith trace id) + total/avg/p95 stat tiles + by-status pill cluster. Both pages match the Dashboard's cream/ink/amber design grammar. `lib/api.ts` extended with `fetchJobs` / `fetchJobStats` / `fetchAgentRuns` / `fetchAgentRunsStats` (query params built only for set filters so backend defaults apply). `TopBar` now routes Dashboard / Jobs / Resume / Agent — only Emails + Calendar remain placeholder until M3/M4. Testing + CI: `backend/tests/` scaffolded with `conftest.py` (injects backend/ into sys.path so tests import `from services.X` cleanly, same workaround `celery_app.py` + `tasks.py` use). 4 pure-function test files = 72 tests in 0.22s: `test_normalize` pins the 4-layer brand→legal matcher's 97% hit-rate contract (legal suffix stripping, "The X" prefix, ampersand preservation, stacked suffixes, case + punctuation normalization), `test_sponsorship` is an executable spec of the §6 6-rule resolver including the Cyient explicit-denial-overrides-strong-LCA case + parse_classifier_output tolerance for fenced / unlabeled / prose-wrapped JSON, `test_workday_parser` covers `_parse_posted_on` (Today/Yesterday/N Days|Hours|Weeks|Months Ago / 30+ Days Ago plus-sign / unparseable fallback) + `_strip_html` (entity decode, br→newline, p/li paragraph breaks, blank-line collapse), `test_matching` covers cosine sim + top-K mean edge cases (zero vectors, scale invariance, negative scores clipped, empty embeddings filtered, k > section count). Ruff config tightened: globally `select=[E,F,I,B,UP]` with `E501`/`B905` ignored; per-file ignores for celery_app/tasks/conftest E402 (intentional sys.path-before-imports for spawn workers) + routers/scripts B008 (FastAPI Depends() idiom + argparse defaults). Two F841 unused-vars deleted in scripts; B017 blind-except tightened to `pytest.raises(json.JSONDecodeError)`. `.github/workflows/ci.yml` runs both jobs in parallel with concurrency cancel-in-progress: backend job does `pip install -e .[dev]` (doubles as install smoke-check) → ruff → pytest with dummy env vars (`GROQ_API_KEY=ci-dummy` etc. so pydantic-settings doesn't fail at import); frontend job runs `tsc -b && vite build`. First run red — setuptools rejected `readme = "../README.md"` as a path-traversal security violation; fixed by dropping the field. Second run green. README badge wired. |
 | 2026-05-29 | 0.1 | Initial draft — architecture, tech stack, milestones, data model |
 | 2026-05-29 | 0.2 | Unified `prompt_templates.module` enum to `job_board` (was `job_match` in §5); aligned with §11 registry and §6 Module 2 naming |
 | 2026-05-29 | 0.3 | Switched embeddings from OpenAI text-embedding-3-small to local Ollama `nomic-embed-text` (768-dim, free); migrated `resume_sections.embedding` from `vector(1536)` to `vector(768)`; removed OpenAI dependency for dev/MVP (prod LLM still pay-per-use) |
