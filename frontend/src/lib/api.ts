@@ -181,3 +181,67 @@ export async function fetchAgentRunsStats(): Promise<AgentRunsStats> {
   const { data } = await api.get<AgentRunsStats>('/api/agent/runs/stats')
   return data
 }
+
+// ---- Jobs list (GET /api/jobs + /api/jobs/stats) ----
+
+export interface JobRow {
+  id: string
+  source: string
+  company: string
+  title: string
+  location: string | null
+  source_url: string | null
+  match_score: number | null
+  sponsorship_status: SponsorshipStatus | null
+  sponsorship_confidence: number | null
+  sponsorship_evidence: string | null
+  h1b_lca_count_recent: number | null
+  cpt_opt_friendly: boolean | null
+}
+
+export interface JobListPage {
+  total: number
+  items: JobRow[]
+}
+
+export interface JobStats {
+  total: number
+  by_source: Record<string, number>
+  by_sponsorship: Record<string, number>
+  by_company_top: { company: string; count: number }[]
+  avg_match_score: number | null
+  avg_match_score_sponsors_only: number | null
+}
+
+export interface JobListQuery {
+  keyword?: string | null
+  location?: string | null
+  company?: string | null
+  source?: JobSource | null
+  sponsorship_status?: SponsorshipStatus | null
+  hide_denials?: boolean
+  min_score?: number | null
+  limit?: number
+  offset?: number
+}
+
+export async function fetchJobs(q: JobListQuery = {}): Promise<JobListPage> {
+  const params: Record<string, string | number | boolean> = {
+    limit: q.limit ?? 20,
+    offset: q.offset ?? 0,
+    hide_denials: q.hide_denials ?? true,
+  }
+  if (q.keyword) params.keyword = q.keyword
+  if (q.location) params.location = q.location
+  if (q.company) params.company = q.company
+  if (q.source) params.source = q.source
+  if (q.sponsorship_status) params.sponsorship_status = q.sponsorship_status
+  if (q.min_score != null) params.min_score = q.min_score
+  const { data } = await api.get<JobListPage>('/api/jobs', { params })
+  return data
+}
+
+export async function fetchJobStats(): Promise<JobStats> {
+  const { data } = await api.get<JobStats>('/api/jobs/stats')
+  return data
+}

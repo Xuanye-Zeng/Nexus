@@ -8,7 +8,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/' },
-  { label: 'Jobs', to: null },
+  { label: 'Jobs', to: '/jobs' },
   { label: 'Resume', to: '/resume' },
   { label: 'Emails', to: null },
   { label: 'Calendar', to: null },
