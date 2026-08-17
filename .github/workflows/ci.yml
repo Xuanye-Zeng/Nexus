@@ -29,6 +29,17 @@ jobs:
           cache: pip
           cache-dependency-path: backend/pyproject.toml
 
+      - name: Install WeasyPrint native deps
+        # WeasyPrint (PDF export) needs cairo / pango / gdk-pixbuf at runtime.
+        # Without them, `test_pdf.py::TestMarkdownToPdf::*` auto-skips locally
+        # via the `requires_weasyprint` marker; installing here means CI
+        # actually exercises the PDF path.
+        working-directory: /
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libcairo2 libgdk-pixbuf-2.0-0
+
       - name: Install
         # `-e .[dev]` resolves all deps from pyproject.toml + ruff/pytest dev
         # extras. Slower than installing just pytest+ruff, but it doubles as

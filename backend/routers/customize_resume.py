@@ -9,9 +9,11 @@ End-to-end M1 endpoint that chains the active prompts:
 
 Single-user mode: resume profile is resolved by ALEX_EMAIL until auth lands.
 """
+import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -20,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db import SessionLocal
 from models import PromptTemplate, ResumeProfile, ResumeSection, User
 from services.llm import get_llm
+from services.pdf import markdown_to_pdf
 from services.retrieval import top_k_sections_for_jd
 from services.sponsorship import parse_classifier_output, resolve_sponsorship
 
@@ -280,4 +283,44 @@ async def customize_resume(
             "bullet_rewriter": rewriter_prompt.version,
             "sponsorship_classifier": sponsorship_prompt.version,
         },
+    )
+
+
+# ---- PDF export -----------------------------------------------------------
+
+
+class CustomizeResumePdfRequest(BaseModel):
+    markdown: str = Field(..., min_length=1, description="Rewritten resume markdown")
+    user_name: str | None = Field(default=None, description="Used in filename + PDF <h1>")
+
+
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _safe_filename_part(name: str) -> str:
+    """Slug-ish name for Content-Disposition — no directory separators, no spaces."""
+    slug = _UNSAFE_FILENAME_CHARS.sub("_", name.strip()).strip("_")
+    return slug or "resume"
+
+
+@router.post("/customize-resume/pdf")
+async def customize_resume_pdf(req: CustomizeResumePdfRequest) -> Response:
+    """Render the customized resume markdown to PDF for download.
+
+    The frontend already has the rewrite in state, so we take the markdown
+    verbatim and skip the LLM. BEFORE/AFTER/REASON triples are collapsed to
+    final text inside `services.pdf.markdown_to_pdf` — recruiters get the
+    clean version, not the diff.
+    """
+    display_name = (req.user_name or "Alex Zeng").strip() or "Alex Zeng"
+    try:
+        pdf_bytes = markdown_to_pdf(req.markdown, title=f"{display_name} — Resume")
+    except Exception as exc:  # weasyprint failures surface as 500 with the message
+        raise HTTPException(500, f"PDF render failed: {exc}") from exc
+
+    safe = _safe_filename_part(display_name)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe}_resume.pdf"'},
     )

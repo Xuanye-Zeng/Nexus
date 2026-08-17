@@ -2,6 +2,28 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Loader2, Send, Sparkles, X } from 'lucide-react'
 import { MUTATING_INTENTS, runAgent, type AgentResponse } from '../lib/api'
+import {
+  CustomizeResumeView,
+  SearchJobsView,
+  TriageEmailsView,
+  isCustomizeResumeResult,
+  isSearchJobsResult,
+  isTriageEmailsResult,
+} from './AgentResultViews'
+
+/** Which intents get a rich structured view instead of the raw JSON dump. */
+function renderRichResult(intent: string, toolResult: unknown) {
+  if (intent === 'search_jobs' && isSearchJobsResult(toolResult)) {
+    return <SearchJobsView data={toolResult} />
+  }
+  if (intent === 'triage_emails' && isTriageEmailsResult(toolResult)) {
+    return <TriageEmailsView data={toolResult} />
+  }
+  if (intent === 'customize_resume' && isCustomizeResumeResult(toolResult)) {
+    return <CustomizeResumeView data={toolResult} />
+  }
+  return null
+}
 
 const SUGGESTIONS = [
   'Show SDE intern jobs posted in the last 2 days',
@@ -120,21 +142,45 @@ export function AgentBar() {
           {lastResult.error ? (
             <p className="text-sm text-red-700">{lastResult.error}</p>
           ) : (
-            <div className="text-sm text-ink-900 whitespace-pre-wrap leading-relaxed">
-              {lastResult.response}
-            </div>
-          )}
-
-          {!!lastResult.tool_result && (
-            <details className="mt-4 group">
-              <summary className="text-xs text-ink-500 cursor-pointer flex items-center gap-1 hover:text-ink-900 list-none">
-                <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
-                Raw tool result
-              </summary>
-              <pre className="mt-2 text-[11px] bg-cream-50 rounded-xl p-3 overflow-x-auto max-h-64 text-ink-700">
-                {JSON.stringify(lastResult.tool_result, null, 2)}
-              </pre>
-            </details>
+            (() => {
+              const rich = renderRichResult(
+                lastResult.intent,
+                lastResult.tool_result,
+              )
+              if (rich) {
+                // Structured card takes over — the model's prose is redundant
+                // when we can show the actual rows. Still show classifier
+                // response as a short lead-in if it's short.
+                return (
+                  <>
+                    {lastResult.response && (
+                      <div className="text-sm text-ink-700 leading-relaxed">
+                        {lastResult.response}
+                      </div>
+                    )}
+                    {rich}
+                  </>
+                )
+              }
+              return (
+                <>
+                  <div className="text-sm text-ink-900 whitespace-pre-wrap leading-relaxed">
+                    {lastResult.response}
+                  </div>
+                  {!!lastResult.tool_result && (
+                    <details className="mt-4 group">
+                      <summary className="text-xs text-ink-500 cursor-pointer flex items-center gap-1 hover:text-ink-900 list-none">
+                        <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                        Raw tool result
+                      </summary>
+                      <pre className="mt-2 text-[11px] bg-cream-50 rounded-xl p-3 overflow-x-auto max-h-64 text-ink-700">
+                        {JSON.stringify(lastResult.tool_result, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </>
+              )
+            })()
           )}
         </div>
       )}

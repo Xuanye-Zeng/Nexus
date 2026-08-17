@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Check, Copy, Loader2, Sparkles, Wand2 } from 'lucide-react'
+import { Check, Copy, Download, Loader2, Sparkles, Wand2 } from 'lucide-react'
 import { TopBar } from '../components/TopBar'
 import { Card, CardHeader } from '../components/Card'
 import {
   customizeResume,
+  downloadResumePdf,
   type CustomizeResponse,
   type SponsorshipStatus,
 } from '../lib/api'
@@ -161,7 +162,11 @@ function ResultPanels({
   return (
     <>
       <SponsorshipCard verdict={data.sponsorship} />
-      <RewriteCard sections={sections} plain={plain} />
+      <RewriteCard
+        sections={sections}
+        plain={plain}
+        rawMarkdown={data.rewritten_resume}
+      />
       <ExtractionCard text={data.jd_extraction} />
       <AuditCard data={data} />
     </>
@@ -206,15 +211,42 @@ function SponsorshipCard({ verdict }: { verdict: CustomizeResponse['sponsorship'
 function RewriteCard({
   sections,
   plain,
+  rawMarkdown,
 }: {
   sections: RewrittenSection[]
   plain: string
+  rawMarkdown: string
 }) {
   const [copied, setCopied] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const copyAll = async () => {
     await navigator.clipboard.writeText(plain)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
+  }
+
+  const hasContent = rawMarkdown.trim().length > 0
+
+  const downloadPdf = async () => {
+    if (!hasContent || downloading) return
+    setDownloading(true)
+    setDownloadError(null)
+    try {
+      const blob = await downloadResumePdf(rawMarkdown, 'Alex Zeng')
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'Alex_Zeng_resume.pdf'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'PDF download failed')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   // Count bullets to show in header
@@ -242,6 +274,18 @@ function RewriteCard({
               {totals.rewritten} rewritten · {totals.kept} kept
             </span>
             <button
+              onClick={downloadPdf}
+              disabled={!hasContent || downloading}
+              className="text-xs px-3 py-1.5 rounded-full bg-cream-100 text-ink-900 hover:bg-cream-200 transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {downloading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Download className="h-3 w-3" />
+              )}
+              {downloading ? 'Rendering…' : 'Download PDF'}
+            </button>
+            <button
               onClick={copyAll}
               className="text-xs px-3 py-1.5 rounded-full bg-ink-900 text-white hover:bg-ink-700 transition-colors flex items-center gap-1.5"
             >
@@ -251,6 +295,9 @@ function RewriteCard({
           </div>
         }
       />
+      {downloadError && (
+        <div className="mb-3 text-xs text-red-700">{downloadError}</div>
+      )}
 
       <div className="space-y-6">
         {sections.map((section) => (

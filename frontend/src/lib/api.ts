@@ -245,3 +245,17 @@ export async function fetchJobStats(): Promise<JobStats> {
   const { data } = await api.get<JobStats>('/api/jobs/stats')
   return data
 }
+
+// ---- Resume PDF export (POST /api/customize-resume/pdf) ----
+
+export async function downloadResumePdf(
+  markdown: string,
+  userName: string,
+): Promise<Blob> {
+  const { data } = await api.post<Blob>(
+    '/api/customize-resume/pdf',
+    { markdown, user_name: userName },
+    { responseType: 'blob' },
+  )
+  return data
+}

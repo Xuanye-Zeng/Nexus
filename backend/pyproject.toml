@@ -40,6 +40,10 @@ dependencies = [
     # E — Celery 6h auto-ingest
     "celery>=5.4",
     "redis>=5.2",
+
+    # R5 — PDF export of the customized resume (markdown -> HTML -> PDF)
+    "weasyprint>=63",
+    "markdown>=3.7",
 ]
 
 [project.optional-dependencies]
