@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Bookmark,
   Briefcase,
   Building2,
+  CheckCircle2,
   ExternalLink,
   Gauge,
   MapPin,
@@ -11,8 +13,11 @@ import {
   X,
 } from 'lucide-react'
 import {
+  clearJobStatus,
   fetchJobStats,
   fetchJobs,
+  upsertJobStatus,
+  type ApplicationStatus,
   type JobRow,
   type JobSource,
   type SponsorshipStatus,
@@ -142,6 +147,26 @@ export function JobsPage() {
       }),
     placeholderData: (prev) => prev,
   })
+
+  const qc = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: async (v: {
+      listingId: string
+      next: ApplicationStatus | null
+    }) => {
+      if (v.next === null) return clearJobStatus(v.listingId)
+      return upsertJobStatus(v.listingId, v.next)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs', 'list'] })
+      qc.invalidateQueries({ queryKey: ['jobs', 'applications'] })
+      qc.invalidateQueries({ queryKey: ['overview'] })
+    },
+  })
+  const onStatusChange = (
+    listingId: string,
+    next: ApplicationStatus | null,
+  ) => mutation.mutate({ listingId, next })
 
   const totalPages = list.data ? Math.max(1, Math.ceil(list.data.total / PAGE_SIZE)) : 1
   const hasActiveFilter = useMemo(
@@ -334,7 +359,15 @@ export function JobsPage() {
           ) : (
             <ul className="divide-y divide-cream-200">
               {list.data.items.map((job, i) => (
-                <JobItem key={job.id} job={job} rank={page * PAGE_SIZE + i + 1} />
+                <JobItem
+                  key={job.id}
+                  job={job}
+                  rank={page * PAGE_SIZE + i + 1}
+                  onStatusChange={(next) => onStatusChange(job.id, next)}
+                  mutationPending={
+                    mutation.isPending && mutation.variables?.listingId === job.id
+                  }
+                />
               ))}
             </ul>
           )}
@@ -392,13 +425,52 @@ function SummaryStat({
   )
 }
 
-function JobItem({ job, rank }: { job: JobRow; rank: number }) {
+const STATUS_PILL: Record<ApplicationStatus, string> = {
+  saved: 'bg-cream-200 text-ink-700 border border-cream-200',
+  applied: 'bg-amber-brand text-ink-900',
+  interviewing: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  offer: 'bg-emerald-200 text-emerald-900',
+  rejected: 'bg-red-50 text-red-700 border border-red-200',
+  withdrawn: 'bg-cream-100 text-ink-500 border border-cream-200',
+}
+
+const STATUS_LABEL: Record<ApplicationStatus, string> = {
+  saved: 'Saved',
+  applied: 'Applied',
+  interviewing: 'Interviewing',
+  offer: 'Offer',
+  rejected: 'Rejected',
+  withdrawn: 'Withdrawn',
+}
+
+const STATUS_OPTIONS: (ApplicationStatus | 'clear')[] = [
+  'saved',
+  'applied',
+  'interviewing',
+  'offer',
+  'rejected',
+  'withdrawn',
+  'clear',
+]
+
+function JobItem({
+  job,
+  rank,
+  onStatusChange,
+  mutationPending,
+}: {
+  job: JobRow
+  rank: number
+  onStatusChange: (next: ApplicationStatus | null) => void
+  mutationPending: boolean
+}) {
   const sponsorOK =
     job.sponsorship_status === 'sponsors' ||
     (job.sponsorship_status === 'unclear' && (job.h1b_lca_count_recent ?? 0) > 0)
   const denial =
     job.sponsorship_status === 'no_sponsorship' ||
     job.sponsorship_status === 'us_citizen_only'
+  const currentStatus = job.user_status?.status ?? null
 
   return (
     <li className="py-3 flex items-start gap-3">
@@ -409,6 +481,18 @@ function JobItem({ job, rank }: { job: JobRow; rank: number }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-ink-900 truncate">{job.company}</span>
+          {currentStatus && (
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wide flex items-center gap-1 ${STATUS_PILL[currentStatus]}`}
+            >
+              {currentStatus === 'saved' ? (
+                <Bookmark className="h-2.5 w-2.5" />
+              ) : (
+                <CheckCircle2 className="h-2.5 w-2.5" />
+              )}
+              {STATUS_LABEL[currentStatus]}
+            </span>
+          )}
           {sponsorOK && (
             <span className="text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wide bg-amber-brand text-ink-900">
               sponsors
@@ -457,17 +541,45 @@ function JobItem({ job, rank }: { job: JobRow; rank: number }) {
         <span className="text-sm font-medium tabular text-ink-900">
           {job.match_score != null ? job.match_score.toFixed(2) : '—'}
         </span>
-        {job.source_url && (
-          <a
-            href={job.source_url}
-            target="_blank"
-            rel="noreferrer"
-            className="h-7 w-7 rounded-full bg-cream-100 flex items-center justify-center hover:bg-amber-brand transition-colors"
-            aria-label="Open posting"
+        <div className="flex items-center gap-1.5">
+          <select
+            value={currentStatus ?? ''}
+            disabled={mutationPending}
+            onChange={(e) => {
+              const v = e.target.value as ApplicationStatus | '' | 'clear'
+              if (v === '' || v === 'clear') onStatusChange(null)
+              else onStatusChange(v)
+            }}
+            className={`text-xs px-2 py-1 rounded-full border border-cream-200 bg-cream-50 text-ink-700 focus:outline-none focus:ring-2 focus:ring-amber-brand disabled:opacity-50 ${
+              currentStatus ? STATUS_PILL[currentStatus] : ''
+            }`}
+            aria-label="Application status"
           >
-            <ExternalLink className="h-3 w-3 text-ink-700" />
-          </a>
-        )}
+            <option value="">Track…</option>
+            {STATUS_OPTIONS.map((s) =>
+              s === 'clear' ? (
+                <option key={s} value="clear">
+                  ✕ Untrack
+                </option>
+              ) : (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ),
+            )}
+          </select>
+          {job.source_url && (
+            <a
+              href={job.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="h-7 w-7 rounded-full bg-cream-100 flex items-center justify-center hover:bg-amber-brand transition-colors"
+              aria-label="Open posting"
+            >
+              <ExternalLink className="h-3 w-3 text-ink-700" />
+            </a>
+          )}
+        </div>
       </div>
     </li>
   )

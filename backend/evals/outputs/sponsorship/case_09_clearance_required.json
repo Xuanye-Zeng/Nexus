@@ -1,0 +1,10 @@
+{
+  "case_id": "case_09_clearance_required",
+  "output": "{\n  \"status\": \"us_citizen_only\",\n  \"evidence\": \"Must be a US citizen — this role supports U.S. Government classified programs and non-US citizens cannot be considered.\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.98\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "us_citizen_only",
+    "expected_cpt_opt": false
+  }
+}

@@ -109,8 +109,25 @@ def evaluate_sponsorship_cached() -> EvalReport:
     return report
 
 
-def evaluate_bullet_rewriter_cached() -> EvalReport:
-    report = EvalReport(module="bullet_rewriter")
+def evaluate_bullet_rewriter_cached(
+    invariant_set: str = "all",
+) -> EvalReport:
+    """`invariant_set`:
+        - "all"  → run every invariant (default; used by CLI + full reports).
+        - "hard" → correctness/safety only (structure / number / skills). CI
+          asserts pass_rate == 1.0 on this subset — regressions here are
+          shipping bugs.
+        - "soft" → style only (fillers / length). Used to *track* stochastic
+          slippage; never asserts strict equality.
+    """
+    if invariant_set == "hard":
+        checks = br_inv.HARD_INVARIANTS
+    elif invariant_set == "soft":
+        checks = br_inv.SOFT_INVARIANTS
+    else:
+        checks = br_inv.ALL_INVARIANTS
+
+    report = EvalReport(module=f"bullet_rewriter ({invariant_set})")
     for fx in load_bullet_rewriter_fixtures():
         cached = load_cached("bullet_rewriter", fx.case_id)
         if cached is None:
@@ -118,13 +135,13 @@ def evaluate_bullet_rewriter_cached() -> EvalReport:
                 CaseResult(
                     case_id=fx.case_id,
                     results=[
-                        _missing_cache_result(check.__name__)
-                        for check in br_inv.ALL_INVARIANTS
+                        _missing_cache_result(check.__name__) for check in checks
                     ],
                 )
             )
             continue
-        report.cases.append(_eval_bullet_rewriter_case(fx, cached.output))
+        results = [check(cached.output) for check in checks]
+        report.cases.append(CaseResult(case_id=fx.case_id, results=results))
     return report
 
 

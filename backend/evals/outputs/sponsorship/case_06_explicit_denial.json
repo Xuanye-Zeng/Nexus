@@ -1,0 +1,10 @@
+{
+  "case_id": "case_06_explicit_denial",
+  "output": "{\n  \"status\": \"no_sponsorship\",\n  \"evidence\": \"Palantir is unable to offer visa sponsorship or transfer for this position, now or in the future.\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.98\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "no_sponsorship",
+    "expected_cpt_opt": false
+  }
+}

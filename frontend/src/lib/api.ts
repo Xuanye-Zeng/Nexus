@@ -184,6 +184,21 @@ export async function fetchAgentRunsStats(): Promise<AgentRunsStats> {
 
 // ---- Jobs list (GET /api/jobs + /api/jobs/stats) ----
 
+export type ApplicationStatus =
+  | 'saved'
+  | 'applied'
+  | 'interviewing'
+  | 'offer'
+  | 'rejected'
+  | 'withdrawn'
+
+export interface UserApplicationStatus {
+  status: ApplicationStatus
+  applied_at: string | null
+  updated_at: string | null
+  notes: string | null
+}
+
 export interface JobRow {
   id: string
   source: string
@@ -197,6 +212,7 @@ export interface JobRow {
   sponsorship_evidence: string | null
   h1b_lca_count_recent: number | null
   cpt_opt_friendly: boolean | null
+  user_status: UserApplicationStatus | null
 }
 
 export interface JobListPage {
@@ -221,6 +237,7 @@ export interface JobListQuery {
   sponsorship_status?: SponsorshipStatus | null
   hide_denials?: boolean
   min_score?: number | null
+  application_status?: ApplicationStatus | 'any' | 'none' | null
   limit?: number
   offset?: number
 }
@@ -237,12 +254,70 @@ export async function fetchJobs(q: JobListQuery = {}): Promise<JobListPage> {
   if (q.source) params.source = q.source
   if (q.sponsorship_status) params.sponsorship_status = q.sponsorship_status
   if (q.min_score != null) params.min_score = q.min_score
+  if (q.application_status) params.application_status = q.application_status
   const { data } = await api.get<JobListPage>('/api/jobs', { params })
   return data
 }
 
 export async function fetchJobStats(): Promise<JobStats> {
   const { data } = await api.get<JobStats>('/api/jobs/stats')
+  return data
+}
+
+// ---- Application status (R4) ----
+
+export interface ApplicationCounts {
+  by_status: Record<ApplicationStatus, number>
+  total_tracked: number
+  applied_last_7_days: number
+  applied_last_30_days: number
+}
+
+export interface ApplicationRow {
+  listing_id: string
+  company: string
+  title: string
+  source_url: string | null
+  match_score: number | null
+  sponsorship_status: SponsorshipStatus | null
+  status: ApplicationStatus
+  applied_at: string | null
+  updated_at: string | null
+  notes: string | null
+}
+
+export async function upsertJobStatus(
+  listingId: string,
+  status: ApplicationStatus,
+  notes?: string,
+): Promise<UserApplicationStatus> {
+  const { data } = await api.put<UserApplicationStatus>(
+    `/api/jobs/${listingId}/status`,
+    { status, notes: notes ?? null },
+  )
+  return data
+}
+
+export async function clearJobStatus(listingId: string): Promise<void> {
+  await api.delete(`/api/jobs/${listingId}/status`)
+}
+
+export async function fetchApplications(
+  status?: ApplicationStatus,
+): Promise<ApplicationRow[]> {
+  const params: Record<string, string> = {}
+  if (status) params.status = status
+  const { data } = await api.get<ApplicationRow[]>(
+    '/api/jobs/applications',
+    { params },
+  )
+  return data
+}
+
+export async function fetchApplicationCounts(): Promise<ApplicationCounts> {
+  const { data } = await api.get<ApplicationCounts>(
+    '/api/jobs/applications/counts',
+  )
   return data
 }
 

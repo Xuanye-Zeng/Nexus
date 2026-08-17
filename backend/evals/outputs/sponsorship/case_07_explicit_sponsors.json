@@ -1,0 +1,10 @@
+{
+  "case_id": "case_07_explicit_sponsors",
+  "output": "{\n  \"status\": \"sponsors\",\n  \"evidence\": \"We sponsor H-1B visas and green-card petitions for full-time employees, and we work with candidates currently on F-1 OPT to plan the H-1B timeline.\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.95\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "sponsors",
+    "expected_cpt_opt": true
+  }
+}

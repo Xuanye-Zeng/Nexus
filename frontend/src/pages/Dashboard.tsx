@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { Briefcase, Mail, Users } from 'lucide-react'
-import { fetchOverview } from '../lib/api'
+import { Briefcase, CheckCircle2, Mail, Users } from 'lucide-react'
+import { fetchApplicationCounts, fetchOverview } from '../lib/api'
 import { AgentBar } from '../components/AgentBar'
 import { TopBar } from '../components/TopBar'
 import { StatCounts } from '../components/StatCounts'
@@ -12,6 +12,10 @@ export function Dashboard() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['overview'],
     queryFn: fetchOverview,
+  })
+  const appCounts = useQuery({
+    queryKey: ['jobs', 'applications', 'counts'],
+    queryFn: fetchApplicationCounts,
   })
 
   if (isLoading) {
@@ -55,6 +59,11 @@ export function Dashboard() {
                 value: counts.jobs_sponsors,
                 label: 'Sponsor-friendly jobs',
                 icon: <Briefcase className="h-4 w-4" />,
+              },
+              {
+                value: appCounts.data?.applied_last_7_days ?? 0,
+                label: 'Applied · last 7 days',
+                icon: <CheckCircle2 className="h-4 w-4" />,
               },
               {
                 value: counts.jobs_unique_companies,

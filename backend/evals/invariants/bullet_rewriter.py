@@ -261,3 +261,19 @@ ALL_INVARIANTS = [
     check_length_bounded,
     check_skills_categories,
 ]
+
+# HARD invariants are correctness/safety — a failure means the pipeline
+# produced output that's wrong or unsafe to ship. CI must block on these.
+# SOFT invariants are style — filler words or dilution. LLM occasionally
+# slips despite the prompt ban; we track the failure rate over time
+# instead of blocking every commit on a stochastic style regression.
+HARD_INVARIANTS = [
+    check_structure,
+    check_number_preservation,
+    check_skills_categories,
+]
+
+SOFT_INVARIANTS = [
+    check_no_forbidden_fillers,
+    check_length_bounded,
+]

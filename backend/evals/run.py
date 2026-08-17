@@ -135,8 +135,12 @@ async def _regenerate_bullet_rewriter_cache() -> None:
         prompt = prompt_row.content
         prompt_version = prompt_row.version
 
+        # Match scripts/run_bullet_rewriter.py — target Alex's real profile
+        # (the seed DB has an M1-test user with a 2-section stub too).
         user = (
-            await s.execute(select(User).limit(1))
+            await s.execute(
+                select(User).where(User.email == "zeng.xuan@northeastern.edu")
+            )
         ).scalar_one()
         profile = (
             await s.execute(
@@ -155,19 +159,29 @@ async def _regenerate_bullet_rewriter_cache() -> None:
     # Simple render — the /resume pipeline has a richer one; this is enough
     # to give the LLM all bullets.
     def _render(sec) -> str:
-        c = sec.content_json
+        c = sec.content_json or {}
         if sec.section_type == "project":
-            bullets = "\n".join(f"- {b}" for b in c["bullets"])
-            return f"### {c['title']} ({c['dates']})\n{bullets}"
+            bullets = "\n".join(f"- {b}" for b in c.get("bullets", []))
+            title = c.get("title", "")
+            dates = c.get("dates", "")
+            return f"### {title} ({dates})\n{bullets}" if bullets else ""
         if sec.section_type == "experience":
-            bullets = "\n".join(f"- {b}" for b in c["bullets"])
-            return f"### {c['role']}, {c['company']} ({c['dates']})\n{bullets}"
+            bullets = "\n".join(f"- {b}" for b in c.get("bullets", []))
+            role = c.get("role", "")
+            company = c.get("company", "")
+            dates = c.get("dates", "")
+            return f"### {role}, {company} ({dates})\n{bullets}" if bullets else ""
         if sec.section_type == "education":
             details = "\n".join(f"- {d}" for d in c.get("details", []))
-            head = f"### {c['degree']}, {c['school']} ({c['dates']})"
+            degree = c.get("degree", "")
+            school = c.get("school", "")
+            dates = c.get("dates", "")
+            head = f"### {degree}, {school} ({dates})"
             return f"{head}\n{details}" if details else head
         if sec.section_type == "skill":
-            return f"- {c['category']}: {', '.join(c['items'])}"
+            category = c.get("category", "")
+            items = c.get("items", [])
+            return f"- {category}: {', '.join(items)}" if items else ""
         return ""
 
     blocks = {"project": [], "experience": [], "education": [], "skill": []}
