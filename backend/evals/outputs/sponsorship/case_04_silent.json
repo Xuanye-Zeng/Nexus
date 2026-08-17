@@ -1,0 +1,10 @@
+{
+  "case_id": "case_04_silent",
+  "output": "{\n  \"status\": \"unclear\",\n  \"evidence\": \"\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.05\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "unclear",
+    "expected_cpt_opt": false
+  }
+}

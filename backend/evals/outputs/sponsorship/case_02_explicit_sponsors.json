@@ -1,0 +1,10 @@
+{
+  "case_id": "case_02_explicit_sponsors",
+  "output": "{\n  \"status\": \"sponsors\",\n  \"evidence\": \"We sponsor H-1B visas for qualified candidates.\",\n  \"cpt_opt_signal\": true,\n  \"confidence\": 0.95\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "sponsors",
+    "expected_cpt_opt": true
+  }
+}

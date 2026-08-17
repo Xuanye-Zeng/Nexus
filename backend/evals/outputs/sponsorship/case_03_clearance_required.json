@@ -1,0 +1,10 @@
+{
+  "case_id": "case_03_clearance_required",
+  "output": "{\n  \"status\": \"us_citizen_only\",\n  \"evidence\": \"U.S. citizenship required due to ITAR and federal contract requirements.\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.98\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "us_citizen_only",
+    "expected_cpt_opt": false
+  }
+}

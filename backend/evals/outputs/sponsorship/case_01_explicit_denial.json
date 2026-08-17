@@ -1,0 +1,10 @@
+{
+  "case_id": "case_01_explicit_denial",
+  "output": "{\n  \"status\": \"no_sponsorship\",\n  \"evidence\": \"We are unable to sponsor work visas for this position.\",\n  \"cpt_opt_signal\": false,\n  \"confidence\": 0.98\n}",
+  "model": "qwen2.5:14b",
+  "prompt_version": 1,
+  "input_metadata": {
+    "expected_status": "no_sponsorship",
+    "expected_cpt_opt": false
+  }
+}
