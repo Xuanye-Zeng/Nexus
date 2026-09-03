@@ -8,7 +8,11 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     EMBEDDING_MODEL: str = "nomic-embed-text"
     GROQ_API_KEY: SecretStr
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    # llama-3.3-70b-versatile was retired from Groq's catalog late Q3 2026;
+    # gpt-oss-120b is the current in-tier replacement (131k ctx, comparable
+    # capability). Override via env if a smaller/faster model works better
+    # for your workload — e.g. openai/gpt-oss-20b for bulk classification.
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     ADZUNA_APP_ID: str = ""
     ADZUNA_APP_KEY: SecretStr = SecretStr("")
     ADZUNA_COUNTRY: str = "us"

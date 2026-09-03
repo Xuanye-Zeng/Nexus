@@ -1,20 +1,20 @@
 """LLM provider factory — get the right LLM for a given purpose.
 
 Purpose-driven routing because different M1/M2 tasks have different
-volume/quality tradeoffs:
+volume/quality tradeoffs.
 
-  - sponsorship_classifier  -> HIGH volume (1 call per ingested listing),
-                                SIMPLE task (4-class JSON output).
-                                Local Ollama qwen2.5:14b: 6s/call steady-state,
-                                5/5 fixture pass, NO rate limit. Right pick.
+CURRENT ROUTING (all-cloud after 2026-09-02):
+  Every task points at Groq. Rationale: qwen2.5:14b in Ollama holds
+  ~10 GB resident on the M4 Air 24 GB — memory pressure went amber
+  with 10 GB of swap active. Groq is ~50× faster (500+ tokens/sec vs
+  ~10 t/s on-device) so batch ingest finishes in seconds instead of
+  minutes, and volume comfortably fits the free tier. This is exactly
+  the swap `LLM_PROFILES` was designed for: the four ex-Ollama tasks
+  are four one-line edits, zero call-site changes.
 
-  - bullet_rewriter         -> LOW volume (a few calls per resume customize),
-                                HIGH quality (long prompt, must obey strict
-                                preservation rules). Groq llama-3.3-70b is
-                                noticeably better here; volume fits free tier.
-
-  - jd_keyword_extractor    -> LOW volume (1 call per resume customize), keep
-                                Groq for consistency with bullet_rewriter run.
+  If Groq daily budget ever bites: `provider="ollama"` + `model=
+  "qwen2.5:3b"` (2-3 GB resident, 4/5 fixture pass — the intern_cpt
+  case is the known miss) is the drop-in fallback per task.
 
 Adding a new task: add an entry to LLM_PROFILES, then call get_llm("your_task").
 Switching a task's backend: edit one line in LLM_PROFILES (or set the
@@ -43,41 +43,46 @@ class LLMProfile:
 # Purpose -> LLMProfile. Edit here to swap backends.
 LLM_PROFILES: dict[str, LLMProfile] = {
     "sponsorship_classifier": LLMProfile(
-        provider="ollama",
-        model="qwen2.5:14b",
+        # HIGH volume (one call per ingested listing), simple 4-class JSON.
+        # Moved off Ollama 2026-09-02 to free ~10 GB local RAM — Groq's
+        # 500+ t/s throughput takes batch ingest from minutes to seconds.
+        provider="groq",
+        model=settings.GROQ_MODEL,
         temperature=0.0,
     ),
     "bullet_rewriter": LLMProfile(
+        # LOW volume (a few calls per resume customize), HIGH quality —
+        # long preservation-rule prompt where a 70b model is noticeably
+        # better than 14b at obeying the number-preservation invariant.
         provider="groq",
-        model=settings.GROQ_MODEL,  # llama-3.3-70b-versatile by default
+        model=settings.GROQ_MODEL,
         temperature=None,
     ),
     "jd_keyword_extractor": LLMProfile(
+        # LOW volume — chained with bullet_rewriter on the same JD.
         provider="groq",
         model=settings.GROQ_MODEL,
         temperature=0.0,
     ),
     "master_intent_classifier": LLMProfile(
-        # Intent routing is structured JSON classification — qwen2.5:14b
-        # local handles this as well as 70b for the v1 3-tool router,
-        # and avoids burning Groq's daily token budget on every user turn.
-        provider="ollama",
-        model="qwen2.5:14b",
+        # Structured JSON routing; runs on every user agent turn. Groq
+        # is fast enough that latency perceptibly improves vs local.
+        provider="groq",
+        model=settings.GROQ_MODEL,
         temperature=0.0,
     ),
     "master_responder": LLMProfile(
-        # Natural-language formatter over tool output. Same model as intent
-        # for consistency; quality threshold is low here (it's summarizing
+        # Natural-language formatter over tool output. Slight T so the
+        # phrasing isn't robotic; quality threshold is low (summarizing
         # already-structured data, not generating novel content).
-        provider="ollama",
-        model="qwen2.5:14b",
+        provider="groq",
+        model=settings.GROQ_MODEL,
         temperature=0.3,
     ),
     "email_classifier": LLMProfile(
-        # 8-class JSON classification with importance 1-5. Same shape as
-        # sponsorship_classifier; local 14b is the right fit.
-        provider="ollama",
-        model="qwen2.5:14b",
+        # 8-class JSON classification with importance 1-5.
+        provider="groq",
+        model=settings.GROQ_MODEL,
         temperature=0.0,
     ),
 }
