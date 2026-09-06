@@ -112,6 +112,53 @@ def test_sponsorship_evidence_empty_is_ok():
     assert r.passed
 
 
+def test_sponsorship_confidence_grounded_catches_confident_guess():
+    """The failure check_confidence_range cannot see: a well-formed verdict
+    with nothing behind it. This output passes all five other invariants."""
+    bad = (
+        '{"status": "unclear", "evidence": "", "cpt_opt_signal": false, "confidence": 0.95}'
+    )
+    for check in (
+        sp_inv.check_json_parses,
+        sp_inv.check_status_enum,
+        sp_inv.check_confidence_range,
+        sp_inv.check_cpt_opt_bool,
+        sp_inv.check_evidence_verbatim,
+    ):
+        assert check(bad, _GOOD_JD).passed, f"{check.__name__} should not fire here"
+
+    r = sp_inv.check_confidence_grounded(bad, _GOOD_JD)
+    assert not r.passed
+    assert "0.95" in r.detail
+
+
+def test_sponsorship_confidence_grounded_catches_no_evidence():
+    """A decisive status with no citation is still a guess."""
+    bad = (
+        '{"status": "sponsors", "evidence": "", "cpt_opt_signal": false, "confidence": 0.9}'
+    )
+    r = sp_inv.check_confidence_grounded(bad, _GOOD_JD)
+    assert not r.passed
+    assert "no evidence cited" in r.detail
+
+
+def test_sponsorship_confidence_grounded_allows_low_confidence_unclear():
+    """`unclear` with an honest low score is the correct behaviour, not a failure."""
+    good = (
+        '{"status": "unclear", "evidence": "", "cpt_opt_signal": false, "confidence": 0.05}'
+    )
+    assert sp_inv.check_confidence_grounded(good, _GOOD_JD).passed
+
+
+def test_sponsorship_confidence_grounded_allows_cited_high_confidence():
+    """High confidence is fine when the model can point at the JD."""
+    good = (
+        '{"status": "sponsors", "evidence": "We sponsor H-1B visas for qualified candidates.", '
+        '"cpt_opt_signal": false, "confidence": 0.95}'
+    )
+    assert sp_inv.check_confidence_grounded(good, _GOOD_JD).passed
+
+
 # ---------- bullet_rewriter invariants: adversarial ----------
 
 

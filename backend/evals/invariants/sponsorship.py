@@ -11,6 +11,11 @@ These invariants encode what MUST be true regardless of the specific JD:
   5. `evidence` is EITHER empty OR a verbatim substring of the JD
      (whitespace-normalized). Fabricated quotes are the classifier's most
      dangerous failure mode — we cite this string in the UI as proof.
+  6. Confidence is GROUNDED: a verdict with no evidence, or an `unclear`
+     verdict, cannot also claim high confidence. Range alone (invariant 3) is
+     not enough — {status: "unclear", evidence: "", confidence: 0.95} passes
+     every other check while telling the UI to trust a number the model had
+     nothing to base on.
 """
 from __future__ import annotations
 
@@ -120,10 +125,54 @@ def check_evidence_verbatim(raw_output: str, jd_text: str) -> InvariantResult:
     )
 
 
+# A verdict the model cannot point at evidence for is, at best, a guess. We sort
+# and filter listings by this number in the UI, so an ungrounded 0.95 is worse
+# than a low score: it ranks a guess above a cited match.
+UNGROUNDED_CONFIDENCE_CEILING = 0.5
+
+
+def check_confidence_grounded(raw_output: str, jd_text: str) -> InvariantResult:
+    """High confidence requires something to be confident about.
+
+    Complements check_confidence_range: that one only bounds the number to
+    [0, 1]. This one ties it to the rest of the verdict — empty evidence or an
+    `unclear` status caps how confident the classifier is allowed to sound.
+    Mirrors the clamp services/sponsorship.py already applies to unparseable
+    statuses.
+    """
+    try:
+        parsed = parse_classifier_output(raw_output)
+    except Exception:
+        return InvariantResult(
+            name="confidence_grounded", passed=False, detail="upstream JSON parse failed"
+        )
+
+    conf = parsed.get("confidence")
+    if not isinstance(conf, (int, float)):
+        return InvariantResult(
+            name="confidence_grounded", passed=False, detail="upstream confidence not numeric"
+        )
+    conf = float(conf)
+
+    has_evidence = bool((parsed.get("evidence") or "").strip())
+    status = parsed.get("status", "")
+    ungrounded = (not has_evidence) or status == "unclear"
+
+    if ungrounded and conf > UNGROUNDED_CONFIDENCE_CEILING:
+        reason = "no evidence cited" if not has_evidence else "status is 'unclear'"
+        return InvariantResult(
+            name="confidence_grounded",
+            passed=False,
+            detail=f"confidence={conf} exceeds {UNGROUNDED_CONFIDENCE_CEILING} but {reason}",
+        )
+    return InvariantResult(name="confidence_grounded", passed=True)
+
+
 ALL_INVARIANTS = [
     check_json_parses,
     check_status_enum,
     check_confidence_range,
     check_cpt_opt_bool,
     check_evidence_verbatim,
+    check_confidence_grounded,
 ]
