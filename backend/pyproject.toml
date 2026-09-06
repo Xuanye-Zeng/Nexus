@@ -32,6 +32,7 @@ dependencies = [
     "langchain-groq>=0.4",
     "langchain-ollama>=0.4",
     "langgraph>=1.0",
+    "mcp>=2.1",
 
     # M2 — DOL OFLC LCA xlsx ingest
     "pandas>=2.2",
