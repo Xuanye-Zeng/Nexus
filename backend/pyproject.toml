@@ -105,3 +105,9 @@ ignore = [
 "routers/*.py" = ["B008"]
 # Scripts run as __main__ — argparse calls in defaults are fine.
 "scripts/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+# `scripts/` holds manual probes that run as __main__ (argparse + prints against
+# live APIs), not pytest cases. Collecting them by filename pulled in imports
+# that only make sense at runtime and broke the suite before a single test ran.
+testpaths = ["tests"]
